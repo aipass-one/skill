@@ -1,6 +1,6 @@
-# AI Pass Skill
+# AI Pass Skills
 
-> The official AI Pass skill for AI agents — one key, all AI models.
+> Official AI Pass skills for AI agents — one key, all AI models.
 
 ## Install
 
@@ -8,9 +8,33 @@
 npx skills add aipass-one/skill
 ```
 
-Works with Claude Code, Codex, Cursor, OpenCode, and 38+ other agents.
+You'll be prompted to pick which skill to install. Works with Claude Code, Codex, Cursor, OpenCode, and 38+ other agents.
 
-## Setup
+## Which skill do I want?
+
+| Goal | Skill | Auth |
+|---|---|---|
+| Call AI for **yourself** with your own API key | **`aipass-api`** | API key (one env var) |
+| Build an **app** where YOUR users sign in to AI Pass and you call AI on their behalf | **`aipass-oauth-app`** | OAuth2 + PKCE per-user |
+
+```bash
+# Install just the personal-use skill
+npx skills add aipass-one/skill --skill aipass-api
+
+# Install just the app-builder skill
+npx skills add aipass-one/skill --skill aipass-oauth-app
+
+# Install both
+npx skills add aipass-one/skill --all
+```
+
+---
+
+## `aipass-api` — Personal use (API key)
+
+For scripts, tools, agents that call AI models for the developer running them.
+
+### Setup
 
 1. Get your API key: [aipass.one/panel/developer.html](https://aipass.one/panel/developer.html)
 2. Set env var: `export AIPASS_API_KEY=your_key_here`
@@ -118,6 +142,53 @@ curl -X POST https://aipass.one/apikey/v1/images/generations \
 ```bash
 curl https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_API_KEY"
 ```
+
+---
+
+## `aipass-oauth-app` — Build apps for OTHER users (OAuth2)
+
+For products where end users sign in to **their** AI Pass account and AI calls are billed to their budget. Use this if you're shipping a Flutter/iOS/Android app, a web app, a CLI with `--login`, or any product with multiple users.
+
+### Setup
+
+1. Register an OAuth2 client: [aipass.one/panel/developer.html](https://aipass.one/panel/developer.html) → **OAuth2 Clients** → **Create Client**
+2. Save your `client_id` and (for confidential clients) `client_secret`
+3. Add a `redirect_uri` — e.g. `https://yourapp.com/callback`, `myapp://auth/callback`, `http://localhost:3000/callback`
+4. Base URL: `https://aipass.one/oauth2/v1`
+
+### The flow
+
+```
+Generate PKCE → /oauth2/authorize → user signs in → /oauth2/token (exchange code)
+                                                  → access_token + refresh_token
+                                                  → call /oauth2/v1/* with Bearer token
+```
+
+CORS is open on `/oauth2/token`, so browser-only apps can exchange codes without a backend.
+
+### First API call (the part most builders get wrong)
+
+> ⚠️ The token goes in the `Authorization` **header**, NOT in the URL path.
+
+```bash
+# ✅ Correct
+curl -X POST https://aipass.one/oauth2/v1/chat/completions \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-5-mini", "messages": [{"role": "user", "content": "Hello!"}]}'
+
+# ❌ Common mistakes
+curl -X POST https://aipass.one/oauth2/$ACCESS_TOKEN              # token in URL path
+curl /oauth2/v1/chat/completions                                  # missing Authorization header
+curl -H "Authorization: Bearer $ACCESS_TOKEN" \
+  https://aipass.one/apikey/v1/chat/completions                   # wrong namespace (that's the API-key path)
+```
+
+### Allowed endpoints
+
+`/oauth2/v1/{models, chat/completions, embeddings, images/generations, images/edits, images/variations, audio/speech, audio/transcriptions, videos, videos/{id}, videos/{id}/content, videos/{id}/remix}`, plus `/oauth2/userinfo` (with `profile:read` scope) and `/api/v1/usage/me/summary`.
+
+See the full skill (`skills/aipass-oauth-app/SKILL.md`) for code examples in JS/Python/Dart, refresh logic, streaming, and the complete common-mistakes list.
 
 ---
 
