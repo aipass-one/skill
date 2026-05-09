@@ -70,6 +70,9 @@ For scripts, tools, agents that call AI models for the developer running them.
 
 | Model | Notes |
 |-------|-------|
+| `fal-ai/nano-banana-2` | Google's latest (via Fal) — best identity preservation |
+| `fal-ai/nano-banana-pro` | Premium tier of Nano Banana |
+| `openai/gpt-image-2` | OpenAI's GPT Image 2 (via Fal) |
 | `flux-pro/v1.1` | Fast, good quality (~$0.05) |
 | `flux-pro/v1.1-ultra` | High quality |
 | `imagen4/preview/ultra` | Google's best |
@@ -80,12 +83,19 @@ For scripts, tools, agents that call AI models for the developer running them.
 | `seedream/v3` | ByteDance |
 | `dreamina/v3.1` | ByteDance |
 
+> **Tip:** don't hardcode model strings. List at runtime via `GET /v1/models` and filter — the catalog evolves.
+
 ### ✏️ Image Editing
 
 | Model | Notes |
 |-------|-------|
-| `gemini/gemini-3-pro-image-preview` | Best for editing |
-| `gemini/gemini-2.5-flash-image-preview` | Faster, cheaper |
+| `fal-ai/nano-banana-2/edit` | Best face preservation, supports multi-image |
+| `openai/gpt-image-2/edit` | Strong fallback, supports multi-image |
+| `fal-ai/nano-banana-pro/edit` | Premium Nano Banana edit |
+| `gemini/gemini-3-pro-image-preview` | Gemini-routed (via `/chat/completions` with multimodal) |
+| `gemini/gemini-2.5-flash-image-preview` | Faster, cheaper Gemini option |
+
+Image-edit IDs all end in `/edit`. Multi-image input: pass repeated `image` form fields (REST) or a `File[]` array (SDK).
 
 ### 🔊 Text-to-Speech
 
