@@ -1,7 +1,7 @@
 ---
 name: aipass-oauth-app
 description: Build apps where YOUR users sign in via AI Pass and you call AI on their behalf (OAuth2 + PKCE). Use this when you're shipping a product to other people. If you're calling AI for yourself, use `aipass-api` instead.
-version: 2.1.0
+version: 2.2.0
 ---
 
 # AI Pass OAuth — Build Apps for Other Users
@@ -63,7 +63,8 @@ Now in your HTML:
   <script>
     AiPass.initialize({
       clientId: 'client_xxxxxxxxx',  // from step 3
-      requireLogin: true              // gate the whole page behind login
+      requireLogin: false             // default. true forces a login modal on page load — bad UX.
+                                      // Use `await AiPass.login()` from your CTA button instead.
     });
   </script>
 </body>
@@ -462,7 +463,7 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
     // ─── 1. Configure ──────────────────────────────────────────────────────
     AiPass.initialize({
       clientId: 'YOUR_CLIENT_ID_HERE',   // ← replace
-      requireLogin: true
+      requireLogin: false
     });
 
     const STYLES = [

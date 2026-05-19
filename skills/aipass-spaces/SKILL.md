@@ -1,7 +1,7 @@
 ---
 name: aipass-spaces
 description: Publish self-contained HTML apps to the user's AI Pass Space at aipass.one/spaces/<handle>. Activate when the user asks to "publish an app", "make me an app on AI Pass", "drop this on my space", or hands you an API key together with a handle. You write one HTML file and POST it; AI Pass hosts it, gives it a URL, and the in-app AI Pass SDK handles visitor auth + billing for any AI features inside it.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # AI Pass Spaces — App Publishing
@@ -159,7 +159,7 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
   </main>
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
-    AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: true });
+    AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
 
     // Helpers — DO NOT skip these. They prevent two bugs every shipped Spaces app has hit.
     function normalizeModels(raw) {
@@ -244,7 +244,7 @@ The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeec
 ## Rules — don't break these or the published app won't work
 
 1. **Keep `PLACEHOLDER_CLIENT_ID` literal** in the HTML you POST. Server substitutes it.
-2. **Keep `requireLogin: true`** in `AiPass.initialize`. Otherwise the visitor can't be billed and AI calls 401.
+2. **Use `requireLogin: false`** in `AiPass.initialize`. The flag controls whether a forced login modal pops on page load — `true` tanks engagement because visitors get gated before they've seen the app. `false` is the default in the SDK; AI calls still authenticate via OAuth (the `data-aipass-button` widget handles sign-in). Trigger `AiPass.login()` programmatically from your "Generate" button when the user actually commits — that's a cleaner first-impression flow than the modal.
 3. **Keep `<div data-aipass-button></div>`** somewhere visible (header is conventional). The SDK mounts the auth/balance widget into it. No button = no login UI.
 4. **Don't write a custom login flow.** The SDK provides the overlay; rolling your own breaks billing.
 5. **Don't include `$AIPASS_API_KEY` in the HTML.** That's *your* (the agent's) auth for publishing, not the app's runtime auth. Apps authenticate visitors via the SDK + OAuth.
@@ -289,7 +289,7 @@ cat > /tmp/app.html <<'HTML'
   </main>
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
-    AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: true });
+    AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
 
     function normalizeModels(raw) {
       const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
