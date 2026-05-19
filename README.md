@@ -74,9 +74,9 @@ For scripts, tools, agents that call AI models for the developer running them.
 
 | Model | Notes |
 |-------|-------|
-| `fal-ai/nano-banana-2` | Google's latest (via Fal) — best identity preservation |
-| `fal-ai/nano-banana-pro` | Premium tier of Nano Banana |
-| `openai/gpt-image-2` | OpenAI's GPT Image 2 (via Fal) |
+| `fal_ai/fal-ai/nano-banana-2` | Google's latest (via Fal) — best identity preservation |
+| `fal_ai/fal-ai/nano-banana-pro` | Premium tier of Nano Banana |
+| `fal_ai/openai/gpt-image-2` | OpenAI's GPT Image 2 (via Fal) |
 | `flux-pro/v1.1` | Fast, good quality (~$0.05) |
 | `flux-pro/v1.1-ultra` | High quality |
 | `imagen4/preview/ultra` | Google's best |
@@ -93,13 +93,15 @@ For scripts, tools, agents that call AI models for the developer running them.
 
 | Model | Notes |
 |-------|-------|
-| `fal-ai/nano-banana-2/edit` | Best face preservation, supports multi-image |
-| `openai/gpt-image-2/edit` | Strong fallback, supports multi-image |
-| `fal-ai/nano-banana-pro/edit` | Premium Nano Banana edit |
+| `fal_ai/fal-ai/nano-banana-2/edit` | Best face preservation, supports multi-image |
+| `fal_ai/openai/gpt-image-2/edit` | Strong alternative, supports multi-image |
+| `fal_ai/fal-ai/nano-banana-pro/edit` | Premium Nano Banana edit |
 | `gemini/gemini-3-pro-image-preview` | Gemini-routed (via `/chat/completions` with multimodal) |
 | `gemini/gemini-2.5-flash-image-preview` | Faster, cheaper Gemini option |
 
-Image-edit IDs all end in `/edit`. Multi-image input: pass repeated `image` form fields (REST) or a `File[]` array (SDK).
+Image-edit IDs end in `/edit`. **Prefer the `fal_ai/`-prefixed forms** — they're the canonical billing path and the only ones that support multi-image input. Multi-image input: pass repeated `image` form fields (REST) or a `File[]` array (SDK).
+
+> ⚠️ **Don't hardcode these IDs.** Names shift between proxy versions (e.g. older docs listed `fal-ai/nano-banana-2/edit` without the `fal_ai/` prefix and that form now 400s). Always discover via `/v1/models` and filter by pattern (`id.endsWith('/edit')`). See the [`aipass-oauth-app` skill](skills/aipass-oauth-app/SKILL.md) §A.3 for the normalize helper and picker.
 
 ### 🔊 Text-to-Speech
 

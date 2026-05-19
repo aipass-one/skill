@@ -1,7 +1,7 @@
 ---
 name: aipass-spaces
 description: Publish self-contained HTML apps to the user's AI Pass Space at aipass.one/spaces/<handle>. Activate when the user asks to "publish an app", "make me an app on AI Pass", "drop this on my space", or hands you an API key together with a handle. You write one HTML file and POST it; AI Pass hosts it, gives it a URL, and the in-app AI Pass SDK handles visitor auth + billing for any AI features inside it.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # AI Pass Spaces — App Publishing
@@ -160,10 +160,39 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: true });
-    document.addEventListener('aipass:login', async () => {
-      // Visitor signed in. Fetch models, enable features.
-    });
-    document.addEventListener('aipass:error', (e) => console.error(e.detail.error));
+
+    // Helpers — DO NOT skip these. They prevent two bugs every shipped Spaces app has hit.
+    function normalizeModels(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
+      return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
+    }
+
+    let editModel = null;   // discovered at runtime
+    async function discoverModels() {
+      if (!AiPass.isAuthenticated()) return;
+      const ids = normalizeModels(await AiPass.getModels());
+      // Prefer Fal-routed face-preserving edit models; never hardcode literal IDs.
+      const falEdit = (s) => ids.find(id => id.startsWith('fal_ai/') && id.endsWith('/edit') && id.includes(s));
+      editModel = falEdit('nano-banana-2') || falEdit('gpt-image-2') || falEdit('nano-banana');
+      // Now enable UI that depends on the model.
+    }
+
+    function syncAuthUi() {
+      const isAuth = AiPass.isAuthenticated();
+      // toggle every auth-gated piece of UI; call discoverModels() once signed in
+      if (isAuth) discoverModels();
+    }
+
+    // Run once for restored sessions, then poll briefly for async OAuth-callback exchange.
+    syncAuthUi();
+    let _polls = 0;
+    const _tick = setInterval(() => {
+      syncAuthUi();
+      if (++_polls > 25 || AiPass.isAuthenticated()) clearInterval(_tick);
+    }, 200);
+    document.addEventListener('aipass:login',  syncAuthUi);
+    document.addEventListener('aipass:logout', () => { editModel = null; });
+    document.addEventListener('aipass:error',  (e) => console.error(e.detail.error));
   </script>
 </body>
 </html>
@@ -171,22 +200,41 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
 
 **Don't substitute `PLACEHOLDER_CLIENT_ID` yourself.** Leave the literal string — the server replaces it with the space's shared OAuth client id at publish time. (One client per space means a visitor authorizes once and every app in the space works for them.)
 
+### Two bugs every Spaces app ships with if you skip the helpers above
+
+**Bug 1 — `aipass:login` event ≠ "is signed in".** It fires only on the actual click. It does NOT re-fire when the visitor comes back with a valid stored session. If you wrap your "enable features" code inside `addEventListener('aipass:login', …)` and nothing else, every returning user sees your app permanently disabled. Use `AiPass.isAuthenticated()` as the source of truth + sync on init.
+
+**Bug 2 — Hardcoded model IDs return `400 Invalid model name`.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the double `fal_ai/` prefix), not `fal-ai/nano-banana-2/edit`. Names also shift between proxy versions. Always discover via `normalizeModels(await AiPass.getModels())` and pattern-match (e.g. `id.endsWith('/edit')`). Prefer **Fal-routed** IDs (`fal_ai/…`) — they're the canonical billing path and the only ones that support multi-image input.
+
 ### Calling AI from inside a published app
 
 In the browser, **do NOT use `$AIPASS_API_KEY`** — that key is the developer's, not the visitor's. Use the AI Pass JavaScript SDK, which transparently bills the *visitor's* wallet via OAuth:
 
 ```javascript
-document.addEventListener('aipass:login', async () => {
-  const { data: models } = await AiPass.getModels();
-  const chatModel = models.find(m => m.id === 'gpt-5-mini')?.id
-                 || models.find(m => m.id.startsWith('gpt-'))?.id;
+// Use the helpers from the boilerplate section above.
+let chatModel = null;
 
+async function readyChat() {
+  if (!AiPass.isAuthenticated()) return;
+  const ids = normalizeModels(await AiPass.getModels());
+  chatModel = ids.find(id => id === 'gpt-5-mini')
+           || ids.find(id => id.startsWith('gpt-'))
+           || ids.find(id => id.startsWith('claude-'));
+}
+
+// Run on init AND on login transition (the auth pattern from the boilerplate).
+readyChat();
+document.addEventListener('aipass:login', readyChat);
+
+// Later, in your button handler:
+async function ask(prompt) {
+  if (!chatModel) return;
   const r = await AiPass.generateCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: chatModel,
   });
-  // r.choices[0].message.content
-});
+  return r.choices[0].message.content;
+}
 ```
 
 The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
@@ -202,7 +250,8 @@ The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeec
 5. **Don't include `$AIPASS_API_KEY` in the HTML.** That's *your* (the agent's) auth for publishing, not the app's runtime auth. Apps authenticate visitors via the SDK + OAuth.
 6. **Single-file output.** No external JS/CSS files of your own — inline everything. CDN scripts (Tailwind, Chart.js, etc.) are fine.
 7. **Sanitize model output before `innerHTML`.** Use DOMPurify when rendering markdown or any AI-generated HTML.
-8. **Discover models at runtime** — don't hardcode model strings inside the app. Use `AiPass.getModels()` and pick by pattern. See `aipass-oauth-app` for the filter table.
+8. **Discover models at runtime — never hardcode IDs.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the prefix); strings like `fal-ai/nano-banana-2/edit` return `400 Invalid model name`. Normalize with the helper above, filter by pattern (`id.endsWith('/edit')`), and prefer `fal_ai/`-prefixed IDs. See `aipass-oauth-app` §A.3 for the full filter table.
+9. **Use `AiPass.isAuthenticated()` as the source of truth, not the `aipass:login` event.** That event only fires on the actual click; it does NOT re-fire when a returning visitor's session is restored from storage. Apps that gate features inside `addEventListener('aipass:login', …)` are broken for every returning user. Sync on init + poll briefly + re-sync on transition events (boilerplate pattern above).
 
 ---
 
@@ -241,13 +290,21 @@ cat > /tmp/app.html <<'HTML'
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: true });
-    let chatModel = null;
 
-    document.addEventListener('aipass:login', async () => {
-      const { data: models } = await AiPass.getModels();
-      chatModel = (models.find(m => m.id === 'gpt-5-mini')
-                || models.find(m => m.id.startsWith('gpt-')))?.id;
-    });
+    function normalizeModels(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
+      return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
+    }
+    let chatModel = null;
+    async function readyChat() {
+      if (!AiPass.isAuthenticated()) return;
+      const ids = normalizeModels(await AiPass.getModels());
+      chatModel = ids.find(id => id === 'gpt-5-mini') || ids.find(id => id.startsWith('gpt-'));
+    }
+    readyChat();
+    let _p = 0;
+    const _i = setInterval(() => { readyChat(); if (++_p > 25 || chatModel) clearInterval(_i); }, 200);
+    document.addEventListener('aipass:login', readyChat);
 
     document.getElementById('go').onclick = async () => {
       const mood = document.getElementById('mood').value.trim();
