@@ -16,6 +16,7 @@ You'll be prompted to pick which skill to install. Works with Claude Code, Codex
 |---|---|---|
 | Call AI for **yourself** with your own API key | **`aipass-api`** | API key (one env var) |
 | Build an **app** where YOUR users sign in to AI Pass and you call AI on their behalf | **`aipass-oauth-app`** | OAuth2 + PKCE per-user |
+| Publish HTML apps to your AI Pass **Space** (aipass.one/spaces/&lt;handle&gt;) from your agent | **`aipass-spaces`** | API key (publishes); SDK + OAuth (inside the published app) |
 
 ```bash
 # Install just the personal-use skill
@@ -24,7 +25,10 @@ npx skills add aipass-one/skill --skill aipass-api
 # Install just the app-builder skill
 npx skills add aipass-one/skill --skill aipass-oauth-app
 
-# Install both
+# Install just the space-publish skill (great paired with aipass-api)
+npx skills add aipass-one/skill --skill aipass-spaces
+
+# Install everything
 npx skills add aipass-one/skill --all
 ```
 
@@ -199,6 +203,34 @@ curl -H "Authorization: Bearer $ACCESS_TOKEN" \
 `/oauth2/v1/{models, chat/completions, embeddings, images/generations, images/edits, images/variations, audio/speech, audio/transcriptions, videos, videos/{id}, videos/{id}/content, videos/{id}/remix}`, plus `/oauth2/userinfo` (with `profile:read` scope) and `/api/v1/usage/me/summary`.
 
 See the full skill (`skills/aipass-oauth-app/SKILL.md`) for code examples in JS/Python/Dart, refresh logic, streaming, and the complete common-mistakes list.
+
+---
+
+## `aipass-spaces` — Publish HTML apps to your Space
+
+Every AI Pass user can claim a handle at [aipass.one/spaces](https://aipass.one/spaces) and gets a personal app workspace at `aipass.one/spaces/<handle>`. With this skill, an agent (Claude Code, Cursor, etc.) can build an HTML app and publish it to your Space using only your API key — no OAuth setup on your side, no hosting to configure.
+
+### Setup
+
+1. Claim a handle at [aipass.one/spaces](https://aipass.one/spaces) — gives you `aipass.one/spaces/<your-handle>`.
+2. Get your API key: [aipass.one/panel/developer.html](https://aipass.one/panel/developer.html) → API Keys.
+3. `export AIPASS_API_KEY=...`
+
+### Flow
+
+```bash
+# Discover your space + the OAuth client id (one per handle, shared by every app you publish)
+curl -s https://aipass.one/api/v1/spaces/me -H "Authorization: Bearer $AIPASS_API_KEY"
+
+# Publish an HTML file — leave the literal "PLACEHOLDER_CLIENT_ID" in the HTML; the server replaces it
+curl -X POST https://aipass.one/api/v1/spaces/me/apps \
+  -H "Authorization: Bearer $AIPASS_API_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"My App","shortDescription":"...","htmlContent":"<!DOCTYPE html>...PLACEHOLDER_CLIENT_ID..."}'
+```
+
+The published app uses the AI Pass JS SDK inside it (covered by `aipass-oauth-app`) so visitors sign in and AI calls are billed to *their* wallet — not yours. That's how you earn the 50% commission on Spaces.
+
+See the full skill (`skills/aipass-spaces/SKILL.md`) for the HTML boilerplate, field rules, update endpoint, and an end-to-end working example.
 
 ---
 
