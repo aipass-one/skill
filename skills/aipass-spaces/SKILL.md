@@ -161,38 +161,26 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
   <script>
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
 
-    // Helpers — DO NOT skip these. They prevent two bugs every shipped Spaces app has hit.
+    // Helpers — DO NOT skip these. They prevent the two bugs every Spaces app has hit.
     function normalizeModels(raw) {
       const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
       return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
     }
 
-    let editModel = null;   // discovered at runtime
-    async function discoverModels() {
-      if (!AiPass.isAuthenticated()) return;
+    // Load the model catalog once on page load. getModels() does NOT require auth —
+    // it's a public catalog endpoint. Loading it eagerly means the picker is ready
+    // before the visitor commits to anything; no "Sign in to load models…" state.
+    let editModel = null;
+    (async () => {
       const ids = normalizeModels(await AiPass.getModels());
-      // Prefer Fal-routed face-preserving edit models; never hardcode literal IDs.
       const falEdit = (s) => ids.find(id => id.startsWith('fal_ai/') && id.endsWith('/edit') && id.includes(s));
       editModel = falEdit('nano-banana-2') || falEdit('gpt-image-2') || falEdit('nano-banana');
-      // Now enable UI that depends on the model.
-    }
+      // populate your <select>, enable any model-dependent UI
+    })();
 
-    function syncAuthUi() {
-      const isAuth = AiPass.isAuthenticated();
-      // toggle every auth-gated piece of UI; call discoverModels() once signed in
-      if (isAuth) discoverModels();
-    }
-
-    // Run once for restored sessions, then poll briefly for async OAuth-callback exchange.
-    syncAuthUi();
-    let _polls = 0;
-    const _tick = setInterval(() => {
-      syncAuthUi();
-      if (++_polls > 25 || AiPass.isAuthenticated()) clearInterval(_tick);
-    }, 200);
-    document.addEventListener('aipass:login',  syncAuthUi);
-    document.addEventListener('aipass:logout', () => { editModel = null; });
-    document.addEventListener('aipass:error',  (e) => console.error(e.detail.error));
+    // The SDK pops its own auth modal mid-call if needed (see Rule 9 below).
+    // The only listener you need is for surfacing errors.
+    document.addEventListener('aipass:error', (e) => console.error(e.detail.error));
   </script>
 </body>
 </html>
@@ -202,56 +190,86 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
 
 ### Two bugs every Spaces app ships with if you skip the helpers above
 
-**Bug 1 — `aipass:login` event ≠ "is signed in".** It fires only on the actual click. It does NOT re-fire when the visitor comes back with a valid stored session. If you wrap your "enable features" code inside `addEventListener('aipass:login', …)` and nothing else, every returning user sees your app permanently disabled. Use `AiPass.isAuthenticated()` as the source of truth + sync on init.
+**Bug 1 — In-app auth gating breaks the post-login UI.** Don't read `AiPass.isAuthenticated()` to swap button labels (e.g. "Sign in & generate"), hide the model picker, or wait on `aipass:login` to enable features. The SDK already pops its own auth modal at the moment of a protected call (`editImage`, `generateCompletion`, etc.) and resumes the call after login — building a parallel auth gate in the app HTML desyncs after login (button never re-renders → visitor has to refresh). Trust the SDK; treat your app as if every visitor were already signed in, and let the SDK insert the gate where it actually matters.
 
 **Bug 2 — Hardcoded model IDs return `400 Invalid model name`.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the double `fal_ai/` prefix), not `fal-ai/nano-banana-2/edit`. Names also shift between proxy versions. Always discover via `normalizeModels(await AiPass.getModels())` and pattern-match (e.g. `id.endsWith('/edit')`). Prefer **Fal-routed** IDs (`fal_ai/…`) — they're the canonical billing path and the only ones that support multi-image input.
+
+### Before you write a single line of HTML — read the SDK
+
+The JS SDK is the contract for everything you build. Before you touch the boilerplate, **fetch and skim it**:
+
+```bash
+curl -sS https://aipass.one/aipass-sdk.js -o /tmp/aipass-sdk.js
+# Then grep for the methods you'll call:
+grep -n -E "async (generateCompletion|generateImage|editImage|generateSpeech|transcribeAudio|getModels)" /tmp/aipass-sdk.js
+grep -n "_ensureAuthenticated" /tmp/aipass-sdk.js  # see exactly which calls gate auth
+```
+
+What you'll find that matters:
+
+- **Auth-gated methods auto-prompt the modal.** Every generation method (`editImage`, `generateImage`, `generateCompletion`, `generateSpeech`, `transcribeAudio`, `generateImageVariations`, `generateVideo`) starts with `await _ensureAuthenticated()`. If the visitor isn't signed in, the SDK opens its dismissible auth-gate modal, *awaits* the OAuth round-trip, then continues the original call. Your `await AiPass.editImage(...)` resolves with the actual result; no re-click required. Dismissed modals throw `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow silently in your `catch`.
+- **`getModels()` and `getModel()` are public.** No auth, no balance hit. Call them on page load to build pickers; the visitor sees a real catalog before deciding to sign up.
+- **The `<div data-aipass-button>` widget** is the canonical login affordance. The SDK mounts the sign-in button + balance + dropdown menu into it and keeps it in sync with auth state. Put one in your header and you don't need any other login UI — no in-app "Sign in" button, no syncAuth poll.
+
+Then list the available models against your app's needs:
+
+```bash
+# Use any AI Pass API key — same catalog is served back.
+curl -sS https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_API_KEY" \
+  | jq -r '.data[].id' | sort
+```
+
+Pick the trend/use-case-appropriate default for your picker; mark it as the default in the UI (e.g. a "(native to trend)" badge). Always include 2-3 alternatives so the visitor can compare quality.
 
 ### Calling AI from inside a published app
 
 In the browser, **do NOT use `$AIPASS_API_KEY`** — that key is the developer's, not the visitor's. Use the AI Pass JavaScript SDK, which transparently bills the *visitor's* wallet via OAuth:
 
 ```javascript
-// Use the helpers from the boilerplate section above.
+// Use the helpers from the boilerplate section above. getModels() is public,
+// so chatModel is ready before the visitor signs in.
 let chatModel = null;
-
-async function readyChat() {
-  if (!AiPass.isAuthenticated()) return;
+(async () => {
   const ids = normalizeModels(await AiPass.getModels());
   chatModel = ids.find(id => id === 'gpt-5-mini')
            || ids.find(id => id.startsWith('gpt-'))
            || ids.find(id => id.startsWith('claude-'));
-}
+})();
 
-// Run on init AND on login transition (the auth pattern from the boilerplate).
-readyChat();
-document.addEventListener('aipass:login', readyChat);
-
-// Later, in your button handler:
+// In your button handler — no auth check, no login prompt, no re-render dance.
+// If the visitor isn't signed in, the SDK shows its auth modal first, awaits
+// the OAuth round-trip, then completes the call. Your await resolves with
+// the real result.
 async function ask(prompt) {
   if (!chatModel) return;
-  const r = await AiPass.generateCompletion({
-    messages: [{ role: 'user', content: prompt }],
-    model: chatModel,
-  });
-  return r.choices[0].message.content;
+  try {
+    const r = await AiPass.generateCompletion({
+      messages: [{ role: 'user', content: prompt }],
+      model: chatModel,
+    });
+    return r.choices[0].message.content;
+  } catch (e) {
+    if (e && e.code === 'AUTH_REQUIRED') return;  // visitor dismissed the auth modal
+    throw e;
+  }
 }
 ```
 
-The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
+The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`. All of them call `_ensureAuthenticated()` internally — see the "Before you write a single line of HTML — read the SDK" section above. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
 
 ---
 
 ## Rules — don't break these or the published app won't work
 
 1. **Keep `PLACEHOLDER_CLIENT_ID` literal** in the HTML you POST. Server substitutes it.
-2. **Use `requireLogin: false`** in `AiPass.initialize`. The flag controls whether a forced login modal pops on page load — `true` tanks engagement because visitors get gated before they've seen the app. `false` is the default in the SDK; AI calls still authenticate via OAuth (the `data-aipass-button` widget handles sign-in). Trigger `AiPass.login()` programmatically from your "Generate" button when the user actually commits — that's a cleaner first-impression flow than the modal.
+2. **Use `requireLogin: false`** in `AiPass.initialize`. The flag controls whether a forced login modal pops on page load — `true` tanks engagement because visitors get gated before they've seen the app. With `false`, the SDK still gates protected calls (`editImage`, `generateCompletion`, etc.) by showing its auth modal *at the moment of the call*, then awaiting the OAuth round-trip and continuing the call automatically. You do not need to call `AiPass.login()` yourself.
 3. **Keep `<div data-aipass-button></div>`** somewhere visible (header is conventional). The SDK mounts the auth/balance widget into it. No button = no login UI.
 4. **Don't write a custom login flow.** The SDK provides the overlay; rolling your own breaks billing.
 5. **Don't include `$AIPASS_API_KEY` in the HTML.** That's *your* (the agent's) auth for publishing, not the app's runtime auth. Apps authenticate visitors via the SDK + OAuth.
 6. **Single-file output.** No external JS/CSS files of your own — inline everything. CDN scripts (Tailwind, Chart.js, etc.) are fine.
 7. **Sanitize model output before `innerHTML`.** Use DOMPurify when rendering markdown or any AI-generated HTML.
 8. **Discover models at runtime — never hardcode IDs.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the prefix); strings like `fal-ai/nano-banana-2/edit` return `400 Invalid model name`. Normalize with the helper above, filter by pattern (`id.endsWith('/edit')`), and prefer `fal_ai/`-prefixed IDs. See `aipass-oauth-app` §A.3 for the full filter table.
-9. **Use `AiPass.isAuthenticated()` as the source of truth, not the `aipass:login` event.** That event only fires on the actual click; it does NOT re-fire when a returning visitor's session is restored from storage. Apps that gate features inside `addEventListener('aipass:login', …)` are broken for every returning user. Sync on init + poll briefly + re-sync on transition events (boilerplate pattern above).
+9. **Don't gate UI on auth state.** No `AiPass.isAuthenticated()` checks to swap button labels, hide the model picker, or enable features. Don't listen for `aipass:login` / `aipass:logout` to re-render. The SDK already gates protected calls at the API surface — when the visitor clicks "Generate" while signed out, the SDK pops its auth modal, waits for OAuth, then completes the call. In-app gating layered on top of this desyncs after login (buttons stay in their signed-out state until the visitor refreshes). The `<div data-aipass-button>` widget is the only login affordance the app needs.
 
 ---
 
@@ -295,33 +313,35 @@ cat > /tmp/app.html <<'HTML'
       const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
       return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
     }
+    // getModels() is public — load the catalog eagerly so the model is ready
+    // before the visitor commits. The SDK will pop its auth modal at click time.
     let chatModel = null;
-    async function readyChat() {
-      if (!AiPass.isAuthenticated()) return;
+    (async () => {
       const ids = normalizeModels(await AiPass.getModels());
       chatModel = ids.find(id => id === 'gpt-5-mini') || ids.find(id => id.startsWith('gpt-'));
-    }
-    readyChat();
-    let _p = 0;
-    const _i = setInterval(() => { readyChat(); if (++_p > 25 || chatModel) clearInterval(_i); }, 200);
-    document.addEventListener('aipass:login', readyChat);
+    })();
 
     document.getElementById('go').onclick = async () => {
       const mood = document.getElementById('mood').value.trim();
       if (!mood || !chatModel) return;
       const out = document.getElementById('out');
       out.innerHTML = 'Thinking…';
-      const r = await AiPass.generateCompletion({
-        model: chatModel,
-        messages: [
-          { role: 'system', content: 'Return exactly 5 hex color codes for the requested mood, separated by spaces. No prose.' },
-          { role: 'user', content: mood },
-        ],
-      });
-      const hexes = r.choices[0].message.content.match(/#[0-9a-fA-F]{6}/g) || [];
-      out.innerHTML = hexes.slice(0, 5).map(h =>
-        `<div class="aspect-square rounded-lg flex items-end p-1 text-[10px] font-mono" style="background:${h}">${h}</div>`
-      ).join('');
+      try {
+        const r = await AiPass.generateCompletion({
+          model: chatModel,
+          messages: [
+            { role: 'system', content: 'Return exactly 5 hex color codes for the requested mood, separated by spaces. No prose.' },
+            { role: 'user', content: mood },
+          ],
+        });
+        const hexes = r.choices[0].message.content.match(/#[0-9a-fA-F]{6}/g) || [];
+        out.innerHTML = hexes.slice(0, 5).map(h =>
+          `<div class="aspect-square rounded-lg flex items-end p-1 text-[10px] font-mono" style="background:${h}">${h}</div>`
+        ).join('');
+      } catch (e) {
+        if (e && e.code === 'AUTH_REQUIRED') { out.innerHTML = ''; return; }
+        out.innerHTML = `<div class="col-span-5 text-rose-300 text-sm">${e.message || 'Something went wrong'}</div>`;
+      }
     };
   </script>
 </body>
