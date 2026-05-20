@@ -160,6 +160,10 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
+    AiPassUI.init();  // MANDATORY — mounts the sign-in / balance widget into every
+                      // <div data-aipass-button>. The SDK ships the widget markup + CSS
+                      // (connect button → balance display once signed in). Without this
+                      // call the div renders empty and visitors see no auth UI at all.
 
     // Helpers — DO NOT skip these. They prevent the two bugs every Spaces app has hit.
     function normalizeModels(raw) {
@@ -308,6 +312,7 @@ cat > /tmp/app.html <<'HTML'
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
+    AiPassUI.init();  // mount the auth/balance widget into <div data-aipass-button>
 
     function normalizeModels(raw) {
       const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
