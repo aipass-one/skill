@@ -243,19 +243,28 @@ let chatModel = null;
 // If the visitor isn't signed in, the SDK shows its auth modal first, awaits
 // the OAuth round-trip, then completes the call. Your await resolves with
 // the real result.
-async function ask(prompt) {
+//
+// For ANY visible chat output, use streamText() — tokens render as they arrive.
+// Massive perceived-latency win vs waiting 5-30s for a full response.
+async function ask(prompt, outEl) {
   if (!chatModel) return;
   try {
-    const r = await AiPass.generateCompletion({
-      messages: [{ role: 'user', content: prompt }],
-      model: chatModel,
-    });
-    return r.choices[0].message.content;
+    return await AiPass.streamText(
+      { model: chatModel, messages: [{ role: 'user', content: prompt }] },
+      // DO NOT pass maxTokens — reasoning models eat the cap on reasoning and
+      // return content:null. Omit it and the model uses its native max.
+      (full /*, delta */) => { outEl.textContent = full; }
+    );
   } catch (e) {
     if (e && e.code === 'AUTH_REQUIRED') return;  // visitor dismissed the auth modal
     throw e;
   }
 }
+
+// Use generateCompletion ONLY when you need the full response object before
+// doing anything (parsing JSON, branching on usage stats, etc.):
+//   const r = await AiPass.generateCompletion({ model, messages });
+//   const parsed = JSON.parse(r.choices[0].message.content);
 ```
 
 The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`. All of them call `_ensureAuthenticated()` internally — see the "Before you write a single line of HTML — read the SDK" section above. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
@@ -266,13 +275,16 @@ The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeec
 
 1. **Keep `PLACEHOLDER_CLIENT_ID` literal** in the HTML you POST. Server substitutes it.
 2. **Use `requireLogin: false`** in `AiPass.initialize`. The flag controls whether a forced login modal pops on page load — `true` tanks engagement because visitors get gated before they've seen the app. With `false`, the SDK still gates protected calls (`editImage`, `generateCompletion`, etc.) by showing its auth modal *at the moment of the call*, then awaiting the OAuth round-trip and continuing the call automatically. You do not need to call `AiPass.login()` yourself.
-3. **Keep `<div data-aipass-button></div>`** somewhere visible (header is conventional). The SDK mounts the auth/balance widget into it. No button = no login UI.
+3. **Keep `<div data-aipass-button></div>`** somewhere visible (header is conventional) AND **render it in the actual DOM**. The SDK calls `document.querySelectorAll('[data-aipass-button]')` after init and mounts the widget into matched elements. For single-file HTML this is automatic. **For React/Vue/Svelte/Vite-bundled apps** the slot has to be in your JSX/template — putting the string `data-aipass-button` in a comment, in unrendered code, or only inside compiled JS does NOT count. A common failure mode: the agent writes a React PWA, the literal string `data-aipass-button` appears in the bundle (from the skill's boilerplate copied as a comment), but no element is actually rendered, so the widget never mounts and visitors see no login UI. Verify with `document.querySelectorAll('[data-aipass-button]').length > 0` in the live DOM. No mounted element = no login UI.
 4. **Don't write a custom login flow.** The SDK provides the overlay; rolling your own breaks billing.
 5. **Don't include `$AIPASS_API_KEY` in the HTML.** That's *your* (the agent's) auth for publishing, not the app's runtime auth. Apps authenticate visitors via the SDK + OAuth.
-6. **Single-file output.** No external JS/CSS files of your own — inline everything. CDN scripts (Tailwind, Chart.js, etc.) are fine.
+6. **Single-file output preferred.** No external JS/CSS files of your own — inline everything. CDN scripts (Tailwind, Chart.js, etc.) are fine. If you need a bundler (Vite/Webpack) for a complex app, use `vite-plugin-singlefile` to output one self-contained HTML, and double-check rule 3 — the slot must end up in the rendered output.
 7. **Sanitize model output before `innerHTML`.** Use DOMPurify when rendering markdown or any AI-generated HTML.
 8. **Discover models at runtime — never hardcode IDs.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the prefix); strings like `fal-ai/nano-banana-2/edit` return `400 Invalid model name`. Normalize with the helper above, filter by pattern (`id.endsWith('/edit')`), and prefer `fal_ai/`-prefixed IDs. See `aipass-oauth-app` §A.3 for the full filter table.
 9. **Don't gate UI on auth state.** No `AiPass.isAuthenticated()` checks to swap button labels, hide the model picker, or enable features. Don't listen for `aipass:login` / `aipass:logout` to re-render. The SDK already gates protected calls at the API surface — when the visitor clicks "Generate" while signed out, the SDK pops its auth modal, waits for OAuth, then completes the call. In-app gating layered on top of this desyncs after login (buttons stay in their signed-out state until the visitor refreshes). The `<div data-aipass-button>` widget is the only login affordance the app needs.
+10. **Do NOT pass `maxTokens` to `generateCompletion` / `streamText`** unless you genuinely need to truncate output. Reasoning models (`gpt-5-mini`, `gpt-5`, o-series) count internal reasoning against the cap and silently return `content: null` when it's too low. Omit the field and the model uses its native max (128K out for gpt-5-mini). The SDK no longer ships a default; passing one yourself reintroduces the bug.
+11. **Stream visible chat output via `AiPass.streamText(opts, onToken)`.** It's a one-line wrapper around `generateCompletion({ stream: true })` that renders tokens as they arrive — perceived latency drops from 5–30s of "loading…" to ~50ms per token. Reserve `generateCompletion` for programmatic use only (parsing JSON, branching on usage stats). Example: `await AiPass.streamText({ model, messages }, (full) => { el.textContent = full; });`
+12. **For `gpt-image-2/edit`, pass `quality: 'low'`** unless you genuinely need 'high'. It cuts generation time from ~3–5min to ~30–90s. For grainy / retro / VHS / polaroid trends it's also visually on-brand (the aesthetic IS low resolution). The SDK already client-side-shrinks oversized photos before upload.
 
 ---
 

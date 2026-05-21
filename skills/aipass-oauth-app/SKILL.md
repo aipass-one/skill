@@ -210,11 +210,15 @@ if (!editModel) {
 ## A.4 Generate text
 
 ```javascript
+// Programmatic (parse the full response):
 const result = await AiPass.generateCompletion({
   prompt: 'Explain async/await in two sentences.',
   model: 'gpt-5-mini',  // OR pickModel(data, 'cheap-chat')
-  temperature: 0.7,
-  maxTokens: 500
+  temperature: 0.7
+  // DO NOT pass maxTokens. Reasoning models (gpt-5-mini, gpt-5, o-series)
+  // count internal reasoning against the cap and silently return content:null
+  // when it's too low. Omit it and the model uses its native max (128K out
+  // for gpt-5-mini). Only set it when you genuinely need to truncate output.
 });
 console.log(result.choices[0].message.content);
 
@@ -226,6 +230,13 @@ const chat = await AiPass.generateCompletion({
   ],
   model: 'gpt-5-mini'
 });
+
+// VISIBLE chat output → use streamText, not generateCompletion.
+// Tokens render as they arrive (~50ms each) instead of waiting 5-30s.
+const final = await AiPass.streamText(
+  { model: 'gpt-5-mini', messages: [{ role: 'user', content: 'tell a joke' }] },
+  (full) => { document.getElementById('chat-output').textContent = full; }
+);
 ```
 
 ## A.5 Vision (analyze images)
