@@ -269,6 +269,29 @@ async function ask(prompt, outEl) {
 
 The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`. All of them call `_ensureAuthenticated()` internally — see the "Before you write a single line of HTML — read the SDK" section above. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
 
+### Per-user data storage (AiPass.data)
+
+Every published app gets **one JSON document per signed-in visitor** — server-side storage with identity, no backend needed. Use it for anything the app should remember across visits: settings, history, favorites, scores, journal entries. Whole-document semantics: load once, mutate in memory, write the whole object back.
+
+```javascript
+// Load — returns {} on the visitor's first ever use of this app.
+let store = await AiPass.data.get();
+
+store.history = store.history || [];
+store.history.push({ prompt, at: Date.now() });
+
+// Whole-document write (last-write-wins).
+await AiPass.data.set(store);
+```
+
+The contract:
+
+- **Auth-gates at call time, like generation methods.** `get()`/`set()` run `_ensureAuthenticated()` — a signed-out visitor gets the SDK auth modal and your `await` resumes after login. Works exactly right with `requireLogin: false`; do NOT wrap data calls in `isAuthenticated()` checks (rule 9 applies). Dismissed modal throws `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow it in your `catch`.
+- **Scope is automatic:** (signed-in visitor, this app), derived from the `/spaces/{handle}/{slug}` page URL. One app cannot read another space's data.
+- **Limits:** 100 KB per document, ~30 writes/minute per visitor. **Free** — data calls never spend the visitor's wallet. Save on explicit user action or debounce; never per keystroke.
+- **Namespaced API only.** `AiPass.data.get()` / `AiPass.data.set(obj)`. There is no `AiPass.getData()`, `AiPass.saveData()`, or `AiPass.data(...)` — those are hallucinations and will throw.
+- **Optional optimistic concurrency:** `AiPass.data.set(obj, { ifRevision: AiPass.data.revision })` rejects with a revision-conflict error if another tab wrote in between; reload with `get()` and retry. Omit `ifRevision` for last-write-wins (the right default for almost every app).
+
 ---
 
 ## Rules — don't break these or the published app won't work
