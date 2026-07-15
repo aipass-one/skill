@@ -15,7 +15,8 @@ You'll be prompted to pick which skill to install. Works with Claude Code, Codex
 | Goal | Skill | Auth |
 |---|---|---|
 | Call AI for **yourself** with your own API key | **`aipass-api`** | API key (one env var) |
-| Build an **app** where YOUR users sign in to AI Pass and you call AI on their behalf | **`aipass-oauth-app`** | OAuth2 + PKCE per-user |
+| Build a new **app** where users sign in to AI Pass and you call AI on their behalf | **`aipass-oauth-app`** | OAuth2 + PKCE per-user |
+| Add AI Pass to an **existing product** with its own users, sessions, or credits | **`integrate-aipass`** | Backend OAuth broker + PKCE |
 | Publish HTML apps to your AI Pass **Space** (aipass.one/spaces/&lt;handle&gt;) from your agent | **`aipass-spaces`** | API key (publishes); SDK + OAuth (inside the published app) |
 
 ```bash
@@ -24,6 +25,9 @@ npx skills add aipass-one/skill --skill aipass-api
 
 # Install just the app-builder skill
 npx skills add aipass-one/skill --skill aipass-oauth-app
+
+# Install the production integration skill
+npx skills add aipass-one/skill --skill integrate-aipass
 
 # Install just the space-publish skill (great paired with aipass-api)
 npx skills add aipass-one/skill --skill aipass-spaces
@@ -205,6 +209,25 @@ curl -H "Authorization: Bearer $ACCESS_TOKEN" \
 `/oauth2/v1/{models, chat/completions, embeddings, images/generations, images/edits, images/variations, audio/speech, audio/transcriptions, videos, videos/{id}, videos/{id}/content, videos/{id}/remix}`, plus `/oauth2/userinfo` (with `profile:read` scope) and `/api/v1/usage/me/summary`.
 
 See the full skill (`skills/aipass-oauth-app/SKILL.md`) for code examples in JS/Python/Dart, refresh logic, streaming, and the complete common-mistakes list.
+
+---
+
+## `integrate-aipass` — Retrofit an existing product
+
+For established products that already own authentication, sessions, a database, AI features, or free/subscription credits. This skill guides an agent through the production architecture used by integrations such as dr.aft:
+
+- backend OAuth broker with one-time state and PKCE;
+- encrypted server-side access and refresh tokens;
+- verified identity linking and local session minting;
+- concurrency-safe refresh-token rotation;
+- OpenAI-compatible model routing through each user's AI Pass balance;
+- live balance, checkout, and funding-source UI;
+- safe fallback to product credits without double billing;
+- security, regression, local, and deployment tests.
+
+Use `aipass-oauth-app` for a broad SDK/API cookbook or a new client-only app. Use `integrate-aipass` when AI Pass must fit safely into an architecture that already exists.
+
+The full public developer guide is also available at [aipass.one/docs/rest/integration.html](https://aipass.one/docs/rest/integration.html).
 
 ---
 
