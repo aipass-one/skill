@@ -1,0 +1,4 @@
+interface:
+  display_name: "Integrate AI Pass"
+  short_description: "Add AI Pass OAuth and pay-as-you-go AI"
+  default_prompt: "Use $integrate-aipass to add AI Pass OAuth, secure token handling, balance-aware model calls, and safe billing fallback to this app."
