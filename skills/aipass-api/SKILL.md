@@ -18,13 +18,22 @@ Get your key: https://aipass.one/panel/developer.html → API Keys
 `https://aipass.one/apikey/v1`
 
 ## List Available Models
+
+The default response is the OpenAI-compatible `{ "object": "list", "data": [...] }` envelope. Filter by catalog metadata instead of provider-name patterns:
+
 ```bash
-curl -s https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_API_KEY"
+curl -sS "https://aipass.one/apikey/v1/models?type=image&method=image_generation" \
+  -H "Authorization: Bearer $AIPASS_API_KEY" \
+  | jq -r '.data[].id'
 ```
+
+The explicit compatibility query `?detailed=false` returns the historical string array.
 
 ---
 
-## Available Models (as of 2026-02-14)
+## Recommended Stable IDs
+
+Confirm each ID through runtime discovery before use.
 
 ### Text Generation (Chat Completions)
 | Model | Notes |
@@ -38,33 +47,31 @@ curl -s https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_AP
 | `claude-opus-4-6` | Anthropic best (reasoning, code) |
 | `claude-sonnet-4-5` | Anthropic premium |
 | `claude-haiku-4-5` | Anthropic fast/cheap |
-| `gemini/gemini-2.5-flash` | Google fast |
-| `gemini/gemini-2.5-flash-lite` | Google cheapest |
-| `gemini/gemini-2.5-pro` | Google premium |
-| `gemini/gemini-3-pro-preview` | Google latest |
-| `gemini/gemini-3-flash-preview` | Google latest fast |
-| `gemini/gemma-3-27b-it` | Google open model |
-| `cerebras/qwen-3-32b` | Fast inference |
-| `cerebras/gpt-oss-120b` | Large open model |
+| `gemini-2.5-flash` | Google fast |
+| `gemini-2.5-flash-lite` | Google cheapest |
+| `gemini-2.5-pro` | Google premium |
+| `gemini-3.1-pro-preview` | Google latest |
+| `gemini-3-flash-preview` | Google latest fast |
+| `gemma-3-27b-it` | Google open model |
 
 ### Image Generation
 | Model | Notes |
 |-------|-------|
-| `flux-pro/v1.1` | Fast, good quality (~$0.05) |
-| `flux-pro/v1.1-ultra` | High quality |
-| `imagen4/preview/ultra` | Google's best |
-| `standard/1024-x-1024/dall-e-3` | DALL-E 3 |
+| `flux-pro-v1.1` | Fast, good quality (~$0.05) |
+| `flux-pro-v1.1-ultra` | High quality |
+| `imagen-4-ultra` | Google's best |
+| `dall-e-3` | DALL-E 3 |
 | `gpt-image-1` | OpenAI native image gen |
 | `gpt-image-1-mini` | OpenAI image gen, cheaper |
-| `recraft/v3` | Design-focused |
-| `seedream/v3` | ByteDance |
-| `dreamina/v3.1` | ByteDance |
+| `recraft-v3` | Design-focused |
+| `seedream-v3` | ByteDance |
+| `dreamina-v3.1` | ByteDance |
 
 ### Image Editing
 | Model | Notes |
 |-------|-------|
-| `gemini/gemini-3-pro-image-preview` | Best for editing (via chat completions) |
-| `gemini/gemini-2.5-flash-image-preview` | Faster, cheaper editing |
+| `gemini-3-pro-image-preview` | Best for editing (via chat completions) |
+| `gemini-2.5-flash-image-preview` | Faster, cheaper editing |
 
 ### Text-to-Speech
 | Model | Notes |
@@ -88,11 +95,11 @@ curl -s https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_AP
 ### Video Generation
 | Model | Notes |
 |-------|-------|
-| `gemini/veo-3.0-fast-generate-preview` | Fast video |
-| `gemini/veo-3.0-generate-preview` | Quality video |
-| `gemini/veo-3.1-fast-generate-preview` | Latest fast video |
-| `openai/sora-2` | OpenAI video |
-| `openai/sora-2-pro` | OpenAI premium video |
+| `veo-3.0-fast-generate-preview` | Fast video |
+| `veo-3.0-generate-preview` | Quality video |
+| `veo-3.1-fast-generate-preview` | Latest fast video |
+| `sora-2` | OpenAI video |
+| `sora-2-pro` | OpenAI premium video |
 
 ---
 
@@ -141,7 +148,7 @@ curl -s -X POST https://aipass.one/apikey/v1/images/generations \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "flux-pro/v1.1",
+    "model": "flux-pro-v1.1",
     "prompt": "A cute monster with big eyes and small horns, digital art",
     "size": "1024x1024",
     "n": 1
@@ -152,7 +159,7 @@ curl -s -X POST https://aipass.one/apikey/v1/images/generations \
 
 ### Python
 ```python
-def generate_image(prompt, model="flux-pro/v1.1", size="1024x1024"):
+def generate_image(prompt, model="flux-pro-v1.1", size="1024x1024"):
     r = requests.post("https://aipass.one/apikey/v1/images/generations",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "prompt": prompt, "size": size, "n": 1})
@@ -164,7 +171,7 @@ def generate_image(prompt, model="flux-pro/v1.1", size="1024x1024"):
 URL=$(curl -s -X POST https://aipass.one/apikey/v1/images/generations \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"flux-pro/v1.1","prompt":"your prompt","size":"1024x1024","n":1}' \
+  -d '{"model":"flux-pro-v1.1","prompt":"your prompt","size":"1024x1024","n":1}' \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['data'][0]['url'])")
 curl -s "$URL" -o output.png
 ```
@@ -180,7 +187,7 @@ curl -s "$URL" -o output.png
 ```python
 import base64
 
-def edit_image(image_path, prompt, model="gemini/gemini-3-pro-image-preview"):
+def edit_image(image_path, prompt, model="gemini-3-pro-image-preview"):
     with open(image_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode()
     
@@ -209,7 +216,7 @@ curl -s -X POST https://aipass.one/apikey/v1/chat/completions \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemini/gemini-3-pro-image-preview",
+    "model": "gemini-3-pro-image-preview",
     "messages": [{"role": "user", "content": [
       {"type": "text", "text": "Remove the background"},
       {"type": "image_url", "image_url": {"url": "data:image/png;base64,'$B64'"}}
@@ -287,7 +294,7 @@ Video generation is async — start, poll, download.
 ```python
 import time
 
-def generate_video(prompt, model="gemini/veo-3.1-fast-generate-preview", seconds=5):
+def generate_video(prompt, model="veo-3.1-fast-generate-preview", seconds=5):
     # Start
     r = requests.post("https://aipass.one/apikey/v1/videos",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
@@ -311,7 +318,7 @@ def generate_video(prompt, model="gemini/veo-3.1-fast-generate-preview", seconds
 VIDEO_ID=$(curl -s -X POST https://aipass.one/apikey/v1/videos \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini/veo-3.1-fast-generate-preview","prompt":"A monster dancing in the rain","seconds":5}' \
+  -d '{"model":"veo-3.1-fast-generate-preview","prompt":"A monster dancing in the rain","seconds":5}' \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['videoId'])")
 
 # Poll status
@@ -326,11 +333,11 @@ curl -s "https://aipass.one/apikey/v1/videos/$VIDEO_ID/status" \
 | Feature | Endpoint | Recommended Model | Response |
 |---------|----------|-------------------|----------|
 | Text gen | `POST /chat/completions` | `gpt-5-mini` | `.choices[0].message.content` |
-| Image gen | `POST /images/generations` | `flux-pro/v1.1` | `.data[0].url` |
-| Image edit | `POST /chat/completions` | `gemini/gemini-3-pro-image-preview` | base64 in content |
+| Image gen | `POST /images/generations` | `flux-pro-v1.1` | `.data[0].url` |
+| Image edit | `POST /chat/completions` | `gemini-3-pro-image-preview` | base64 in content |
 | TTS | `POST /audio/speech` | `tts-1` | binary audio |
 | STT | `POST /audio/transcriptions` | `whisper-1` | `.text` |
-| Video | `POST /videos` | `gemini/veo-3.1-fast-generate-preview` | async → poll → `.downloadUrl` |
+| Video | `POST /videos` | `veo-3.1-fast-generate-preview` | async → poll → `.downloadUrl` |
 | Embeddings | `POST /embeddings` | `text-embedding-3-small` | `.data[0].embedding` |
 | List models | `GET /models` | — | `.data[].id` |
 
@@ -370,8 +377,8 @@ def embed_batch(texts, model="text-embedding-3-small"):
 
 ## Cost Tips
 - `gpt-5-nano` for simple text (cheapest)
-- `gemini/gemini-2.5-flash-lite` for cheap text with good quality
-- `flux-pro/v1.1` for standard images (~$0.05)
+- `gemini-2.5-flash-lite` for cheap text with good quality
+- `flux-pro-v1.1` for standard images (~$0.05)
 - `whisper-1` for audio — very cheap
 - `tts-1` cheaper than `tts-1-hd`
 - `gpt-image-1-mini` cheaper than `gpt-image-1`

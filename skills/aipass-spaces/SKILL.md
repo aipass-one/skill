@@ -164,20 +164,21 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
     // <div data-aipass-button> on the page (SDK ≥ 2026-05-20). If you inject
     // more buttons dynamically after init, call AiPassUI.reinit().
 
-    // Helpers — DO NOT skip these. They prevent the two bugs every Spaces app has hit.
-    function normalizeModels(raw) {
-      const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
-      return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
-    }
+    // Load the public catalog once on page load. Discovery does not require auth,
+    // so the picker is ready before the visitor commits to anything.
+    const pickPreferred = (models, ids) => {
+      const available = new Set(models.map(model => model.id));
+      return ids.find(id => available.has(id)) || null;
+    };
 
-    // Load the model catalog once on page load. getModels() does NOT require auth —
-    // it's a public catalog endpoint. Loading it eagerly means the picker is ready
-    // before the visitor commits to anything; no "Sign in to load models…" state.
     let editModel = null;
     (async () => {
-      const ids = normalizeModels(await AiPass.getModels());
-      const falEdit = (s) => ids.find(id => id.startsWith('fal_ai/') && id.endsWith('/edit') && id.includes(s));
-      editModel = falEdit('nano-banana-2') || falEdit('gpt-image-2') || falEdit('nano-banana');
+      const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
+      editModel = pickPreferred(data, [
+        'nano-banana-2-edit',
+        'gpt-image-2-edit',
+        'nano-banana-pro-edit'
+      ]);
       // populate your <select>, enable any model-dependent UI
     })();
 
@@ -195,7 +196,7 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
 
 **Bug 1 — In-app auth gating breaks the post-login UI.** Don't read `AiPass.isAuthenticated()` to swap button labels (e.g. "Sign in & generate"), hide the model picker, or wait on `aipass:login` to enable features. The SDK already pops its own auth modal at the moment of a protected call (`editImage`, `generateCompletion`, etc.) and resumes the call after login — building a parallel auth gate in the app HTML desyncs after login (button never re-renders → visitor has to refresh). Trust the SDK; treat your app as if every visitor were already signed in, and let the SDK insert the gate where it actually matters.
 
-**Bug 2 — Hardcoded model IDs return `400 Invalid model name`.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the double `fal_ai/` prefix), not `fal-ai/nano-banana-2/edit`. Names also shift between proxy versions. Always discover via `normalizeModels(await AiPass.getModels())` and pattern-match (e.g. `id.endsWith('/edit')`). Prefer **Fal-routed** IDs (`fal_ai/…`) — they're the canonical billing path and the only ones that support multi-image input.
+**Bug 2 - Private route aliases return `400 Invalid model name`.** Discovery exposes stable public IDs such as `nano-banana-2-edit`; provider-qualified upstream routes never belong in app code. Use `AiPass.getModelCatalog({ type: 'image', method: 'image_edit' })` and select from `data[].id`.
 
 ### Before you write a single line of HTML — read the SDK
 
@@ -204,14 +205,14 @@ The JS SDK is the contract for everything you build. Before you touch the boiler
 ```bash
 curl -sS https://aipass.one/aipass-sdk.js -o /tmp/aipass-sdk.js
 # Then grep for the methods you'll call:
-grep -n -E "async (generateCompletion|generateImage|editImage|generateSpeech|transcribeAudio|getModels)" /tmp/aipass-sdk.js
+grep -n -E "async (generateCompletion|generateImage|editImage|generateSpeech|transcribeAudio|getModels|getModelCatalog)" /tmp/aipass-sdk.js
 grep -n "_ensureAuthenticated" /tmp/aipass-sdk.js  # see exactly which calls gate auth
 ```
 
 What you'll find that matters:
 
 - **Auth-gated methods auto-prompt the modal.** Every generation method (`editImage`, `generateImage`, `generateCompletion`, `generateSpeech`, `transcribeAudio`, `generateImageVariations`, `generateVideo`) starts with `await _ensureAuthenticated()`. If the visitor isn't signed in, the SDK opens its dismissible auth-gate modal, *awaits* the OAuth round-trip, then continues the original call. Your `await AiPass.editImage(...)` resolves with the actual result; no re-click required. Dismissed modals throw `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow silently in your `catch`.
-- **`getModels()` and `getModel()` are public.** No auth, no balance hit. Call them on page load to build pickers; the visitor sees a real catalog before deciding to sign up.
+- **`getModels()`, `getModelCatalog()`, and `getModel()` are public.** No auth, no balance hit. `getModels()` returns stable ID strings; `getModelCatalog()` returns the metadata envelope for filtered pickers.
 - **The `<div data-aipass-button>` widget** is the canonical login affordance. The SDK mounts the sign-in button + balance + dropdown menu into it and keeps it in sync with auth state. Put one in your header and you don't need any other login UI — no in-app "Sign in" button, no syncAuth poll.
 
 Then list the available models against your app's needs:
@@ -233,7 +234,7 @@ In the browser, **do NOT use `$AIPASS_API_KEY`** — that key is the developer's
 // so chatModel is ready before the visitor signs in.
 let chatModel = null;
 (async () => {
-  const ids = normalizeModels(await AiPass.getModels());
+  const ids = await AiPass.getModels();
   chatModel = ids.find(id => id === 'gpt-5-mini')
            || ids.find(id => id.startsWith('gpt-'))
            || ids.find(id => id.startsWith('claude-'));
@@ -303,11 +304,11 @@ The contract:
 5. **Don't include `$AIPASS_API_KEY` in the HTML.** That's *your* (the agent's) auth for publishing, not the app's runtime auth. Apps authenticate visitors via the SDK + OAuth.
 6. **Single-file output preferred.** No external JS/CSS files of your own — inline everything. CDN scripts (Tailwind, Chart.js, etc.) are fine. If you need a bundler (Vite/Webpack) for a complex app, use `vite-plugin-singlefile` to output one self-contained HTML, and double-check rule 3 — the slot must end up in the rendered output.
 7. **Sanitize model output before `innerHTML`.** Use DOMPurify when rendering markdown or any AI-generated HTML.
-8. **Discover models at runtime — never hardcode IDs.** The proxy serves edit models as `fal_ai/fal-ai/nano-banana-2/edit` (note the prefix); strings like `fal-ai/nano-banana-2/edit` return `400 Invalid model name`. Normalize with the helper above, filter by pattern (`id.endsWith('/edit')`), and prefer `fal_ai/`-prefixed IDs. See `aipass-oauth-app` §A.3 for the full filter table.
+8. **Discover models at runtime.** `AiPass.getModels()` returns stable public ID strings. Use `AiPass.getModelCatalog({ type, capability, method })` when selecting by behavior, and never copy provider-qualified route aliases into app code.
 9. **Don't gate UI on auth state.** No `AiPass.isAuthenticated()` checks to swap button labels, hide the model picker, or enable features. Don't listen for `aipass:login` / `aipass:logout` to re-render. The SDK already gates protected calls at the API surface — when the visitor clicks "Generate" while signed out, the SDK pops its auth modal, waits for OAuth, then completes the call. In-app gating layered on top of this desyncs after login (buttons stay in their signed-out state until the visitor refreshes). The `<div data-aipass-button>` widget is the only login affordance the app needs.
 10. **Do NOT pass `maxTokens` to `generateCompletion` / `streamText`** unless you genuinely need to truncate output. Reasoning models (`gpt-5-mini`, `gpt-5`, o-series) count internal reasoning against the cap and silently return `content: null` when it's too low. Omit the field and the model uses its native max (128K out for gpt-5-mini). The SDK no longer ships a default; passing one yourself reintroduces the bug.
 11. **Stream visible chat output via `AiPass.streamText(opts, onToken)`.** It's a one-line wrapper around `generateCompletion({ stream: true })` that renders tokens as they arrive — perceived latency drops from 5–30s of "loading…" to ~50ms per token. Reserve `generateCompletion` for programmatic use only (parsing JSON, branching on usage stats). Example: `await AiPass.streamText({ model, messages }, (full) => { el.textContent = full; });`
-12. **For `gpt-image-2/edit`, pass `quality: 'low'`** unless you genuinely need 'high'. It cuts generation time from ~3–5min to ~30–90s. For grainy / retro / VHS / polaroid trends it's also visually on-brand (the aesthetic IS low resolution). The SDK already client-side-shrinks oversized photos before upload.
+12. **For `gpt-image-2-edit`, pass `quality: 'low'`** unless you genuinely need 'high'. It cuts generation time from ~3–5min to ~30–90s. For grainy / retro / VHS / polaroid trends it's also visually on-brand (the aesthetic IS low resolution). The SDK already client-side-shrinks oversized photos before upload.
 
 ---
 
@@ -348,15 +349,11 @@ cat > /tmp/app.html <<'HTML'
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
     // initialize() auto-mounts the auth widget into <div data-aipass-button>
 
-    function normalizeModels(raw) {
-      const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
-      return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
-    }
-    // getModels() is public — load the catalog eagerly so the model is ready
+    // getModels() is public. Load the stable ID array eagerly so the model is ready
     // before the visitor commits. The SDK will pop its auth modal at click time.
     let chatModel = null;
     (async () => {
-      const ids = normalizeModels(await AiPass.getModels());
+      const ids = await AiPass.getModels();
       chatModel = ids.find(id => id === 'gpt-5-mini') || ids.find(id => id.startsWith('gpt-'));
     })();
 

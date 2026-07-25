@@ -140,13 +140,14 @@ Use `sub` as the durable external identity. Do not key identity by mutable email
 
 ## Models and Generation
 
-Discover model IDs:
+Discover the public model catalog:
 
 ```http
 GET /oauth2/v1/models
+GET /oauth2/v1/models?type=text&method=chat_completions
 ```
 
-The current response is a JSON array of strings. Normalize an OpenAI-style `{ "data": [{ "id": "..." }] }` response too if the application uses a generic provider adapter.
+The default response is the OpenAI-compatible `{ "object": "list", "data": [{ "id": "..." }] }` envelope. Map `data[].id` when only stable public IDs are needed. The explicit compatibility query `?detailed=false` returns the historical string array. Use `type`, `capability`, and `method` filters rather than provider prefixes or path suffixes.
 
 Chat completion:
 

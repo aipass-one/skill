@@ -52,7 +52,17 @@ For scripts, tools, agents that call AI models for the developer running them.
 
 ## Available Models
 
-### 💬 Text Generation
+Discover the current catalog at runtime. Both model-list routes return the OpenAI-compatible `{ "object": "list", "data": [...] }` envelope by default:
+
+```bash
+curl -sS "https://aipass.one/apikey/v1/models" \
+  -H "Authorization: Bearer $AIPASS_API_KEY" \
+  | jq -r '.data[] | [.id, .type, (.methods | join(","))] | @tsv'
+```
+
+Use `type`, `capability`, and `method` query parameters to narrow the result. The explicit compatibility query `?detailed=false` returns the historical string array. The stable public IDs below are preference examples; confirm availability before use.
+
+### Text Generation
 
 | Model | Notes |
 |-------|-------|
@@ -65,47 +75,45 @@ For scripts, tools, agents that call AI models for the developer running them.
 | `claude-opus-4-6` | Anthropic best (reasoning, code) |
 | `claude-sonnet-4-5` | Anthropic premium |
 | `claude-haiku-4-5` | Anthropic fast/cheap |
-| `gemini/gemini-2.5-flash` | Google fast |
-| `gemini/gemini-2.5-flash-lite` | Google cheapest |
-| `gemini/gemini-2.5-pro` | Google premium |
-| `gemini/gemini-3-pro-preview` | Google latest |
-| `gemini/gemini-3-flash-preview` | Google latest fast |
-| `gemini/gemma-3-27b-it` | Google open model |
-| `cerebras/qwen-3-32b` | Fast inference |
-| `cerebras/gpt-oss-120b` | Large open model |
+| `gemini-2.5-flash` | Google fast |
+| `gemini-2.5-flash-lite` | Google cheapest |
+| `gemini-2.5-pro` | Google premium |
+| `gemini-3.1-pro-preview` | Google latest |
+| `gemini-3-flash-preview` | Google latest fast |
+| `gemma-3-27b-it` | Google open model |
 
 ### 🎨 Image Generation
 
 | Model | Notes |
 |-------|-------|
-| `fal_ai/fal-ai/nano-banana-2` | Google's latest (via Fal) — best identity preservation |
-| `fal_ai/fal-ai/nano-banana-pro` | Premium tier of Nano Banana |
-| `fal_ai/openai/gpt-image-2` | OpenAI's GPT Image 2 (via Fal) |
-| `flux-pro/v1.1` | Fast, good quality (~$0.05) |
-| `flux-pro/v1.1-ultra` | High quality |
-| `imagen4/preview/ultra` | Google's best |
-| `standard/1024-x-1024/dall-e-3` | DALL-E 3 |
+| `nano-banana-2` | Google's latest (via Fal) — best identity preservation |
+| `nano-banana-pro` | Premium tier of Nano Banana |
+| `gpt-image-2` | OpenAI's GPT Image 2 (via Fal) |
+| `flux-pro-v1.1` | Fast, good quality (~$0.05) |
+| `flux-pro-v1.1-ultra` | High quality |
+| `imagen-4-ultra` | Google's best |
+| `dall-e-3` | DALL-E 3 |
 | `gpt-image-1` | OpenAI native image gen |
 | `gpt-image-1-mini` | OpenAI image gen, cheaper |
-| `recraft/v3` | Design-focused |
-| `seedream/v3` | ByteDance |
-| `dreamina/v3.1` | ByteDance |
+| `recraft-v3` | Design-focused |
+| `seedream-v3` | ByteDance |
+| `dreamina-v3.1` | ByteDance |
 
-> **Tip:** don't hardcode model strings. List at runtime via `GET /v1/models` and filter — the catalog evolves.
+> **Tip:** filter `/apikey/v1/models` by catalog metadata. Do not infer behavior from a provider prefix or path suffix.
 
 ### ✏️ Image Editing
 
 | Model | Notes |
 |-------|-------|
-| `fal_ai/fal-ai/nano-banana-2/edit` | Best face preservation, supports multi-image |
-| `fal_ai/openai/gpt-image-2/edit` | Strong alternative, supports multi-image |
-| `fal_ai/fal-ai/nano-banana-pro/edit` | Premium Nano Banana edit |
-| `gemini/gemini-3-pro-image-preview` | Gemini-routed (via `/chat/completions` with multimodal) |
-| `gemini/gemini-2.5-flash-image-preview` | Faster, cheaper Gemini option |
+| `nano-banana-2-edit` | Best face preservation, supports multi-image |
+| `gpt-image-2-edit` | Strong alternative, supports multi-image |
+| `nano-banana-pro-edit` | Premium Nano Banana edit |
+| `gemini-3-pro-image-preview` | Gemini-routed (via `/chat/completions` with multimodal) |
+| `gemini-2.5-flash-image-preview` | Faster, cheaper Gemini option |
 
-Image-edit IDs end in `/edit`. **Prefer the `fal_ai/`-prefixed forms** — they're the canonical billing path and the only ones that support multi-image input. Multi-image input: pass repeated `image` form fields (REST) or a `File[]` array (SDK).
+Image-edit models expose `image_edit` in their catalog `methods`. Public IDs are provider-neutral and use stable names such as `nano-banana-2-edit`; private provider routes are never discovery output. Multi-image input uses repeated `image` form fields (REST) or a `File[]` array (SDK).
 
-> ⚠️ **Don't hardcode these IDs.** Names shift between proxy versions (e.g. older docs listed `fal-ai/nano-banana-2/edit` without the `fal_ai/` prefix and that form now 400s). Always discover via `/v1/models` and filter by pattern (`id.endsWith('/edit')`). See the [`aipass-oauth-app` skill](skills/aipass-oauth-app/SKILL.md) §A.3 for the normalize helper and picker.
+Discover with `/apikey/v1/models?type=image&method=image_edit`, then choose from the returned stable IDs. See the [`aipass-oauth-app` skill](skills/aipass-oauth-app/SKILL.md) for SDK catalog filtering and selection.
 
 ### 🔊 Text-to-Speech
 
@@ -125,11 +133,11 @@ Image-edit IDs end in `/edit`. **Prefer the `fal_ai/`-prefixed forms** — they'
 
 | Model | Notes |
 |-------|-------|
-| `gemini/veo-3.0-fast-generate-preview` | Fast video |
-| `gemini/veo-3.0-generate-preview` | Quality video |
-| `gemini/veo-3.1-fast-generate-preview` | Latest fast video |
-| `openai/sora-2` | OpenAI video |
-| `openai/sora-2-pro` | OpenAI premium video |
+| `veo-3.0-fast-generate-preview` | Fast video |
+| `veo-3.0-generate-preview` | Quality video |
+| `veo-3.1-fast-generate-preview` | Latest fast video |
+| `sora-2` | OpenAI video |
+| `sora-2-pro` | OpenAI premium video |
 
 ### 🔢 Embeddings
 
@@ -155,7 +163,7 @@ curl -X POST https://aipass.one/apikey/v1/chat/completions \
 curl -X POST https://aipass.one/apikey/v1/images/generations \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "flux-pro/v1.1", "prompt": "A futuristic city", "size": "1024x1024", "n": 1}'
+  -d '{"model": "flux-pro-v1.1", "prompt": "A futuristic city", "size": "1024x1024", "n": 1}'
 ```
 
 ### List All Models

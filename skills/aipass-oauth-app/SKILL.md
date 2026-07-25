@@ -127,85 +127,70 @@ document.addEventListener('aipass:login', () => {
 
 Always pair the event handler with an initial `isAuthenticated()` check.
 
-## A.3 Discover models at runtime — DO NOT hardcode model strings
+## A.3 Discover models at runtime
 
-Model availability evolves and differs between environments. **Always list models at runtime and filter by ID convention.** Hardcoding strings will bite you — model IDs change shape (`fal-ai/...` vs `fal_ai/fal-ai/...`), some are added/removed, and per-account access varies.
+Model availability evolves and can differ between environments. Discover the public catalog at runtime and select from the stable IDs it returns. Provider-qualified routes are private implementation details.
 
-### A.3.1 Call `getModels()` defensively
+### A.3.1 Use the SDK's two explicit return shapes
 
-`AiPass.getModels()` may return either `["id1", "id2", …]` (plain array) or `{ data: [{ id: "id1" }, …] }` (OpenAI-style) depending on SDK version and route. **Always normalize.** Never write `const { data } = await AiPass.getModels()` — that destructures `data` from a plain array and gives `undefined`, the single most common breakage.
+`AiPass.getModels()` returns a plain array of stable public ID strings. `AiPass.getModelCatalog()` returns the OpenAI-compatible `{ object: 'list', data: [...] }` envelope with safe metadata.
 
 ```javascript
-function normalizeModels(raw) {
-  const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
-  return arr.map(m => (typeof m === 'string' ? m : (m && m.id) || '')).filter(Boolean);
-}
-
-const ids = normalizeModels(await AiPass.getModels());
+const ids = await AiPass.getModels();
 console.log(`${ids.length} models available`);
-// → ["gpt-5-mini", "claude-haiku-4-5", "fal_ai/fal-ai/nano-banana-2/edit", ...]
+
+const { data: editModels } = await AiPass.getModelCatalog({
+  type: 'image',
+  method: 'image_edit'
+});
+// Each entry includes id, type, capabilities, and methods.
 ```
 
-### A.3.2 Prefer Fal-routed image models
+`AiPass.getModels({ detailed: true })` remains a compatibility alias for the catalog envelope, but new code should call `getModelCatalog()` directly.
 
-Image generation and editing are served through Fal at `fal_ai/<vendor>/<model>[/edit]`. **Prefer those IDs** even when the same model has a direct (`gpt-image-*`, `gemini/*-image*`) route. Reasons:
+### A.3.2 Filter with catalog metadata
 
-- Unified billing through Fal — keeps revenue share consistent and your wallet predictable.
-- Multi-image input is only supported on the Fal-routed `/edit` variants.
-- The direct-vendor IDs (`gpt-image-1`, `gpt-image-1-mini`) exist as legacy fallbacks; don't reach for them unless Fal is unavailable.
-
-### A.3.3 Filter by ID convention
-
-| Capability | ID pattern | Examples (verify at runtime) |
+| Task | Catalog filters | Example stable public IDs |
 |---|---|---|
-| **Image edit** | starts with `fal_ai/` AND ends with `/edit` | `fal_ai/fal-ai/nano-banana-2/edit`, `fal_ai/openai/gpt-image-2/edit`, `fal_ai/fal-ai/nano-banana-pro/edit` |
-| **Image generation** | starts with `fal_ai/`, does NOT end in `/edit` | `fal_ai/fal-ai/nano-banana-2`, `fal_ai/openai/gpt-image-2`, `flux-pro/v1.1-ultra`, `imagen4/preview/ultra` |
-| **Image upscale** | contains `/upscale/` or known upscaler name | `fal-ai/aura-sr`, `fal-ai/topaz/upscale/image` |
-| **Background removal** | `birefnet` or `ben/v2` in id | `fal-ai/birefnet/v2`, `fal-ai/ben/v2/image` |
-| **Chat / text** | OpenAI/Anthropic/Gemini-style ids | `gpt-5-mini`, `claude-haiku-4-5`, `gemini/gemini-2.5-flash-lite` |
-| **Vision (multimodal)** | any chat model that accepts images | same as chat — pass `content: [{type: 'image_url', ...}]` |
-| **TTS** | `tts-` prefix | `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts` |
-| **Transcription** | `whisper` in id | `whisper-1` |
-| **Embeddings** | `text-embedding-` prefix | `text-embedding-3-small`, `text-embedding-3-large` |
-| **Video** | `veo` or `sora` in id | `gemini/veo-3.1-fast-generate-preview`, `openai/sora-2` |
+| **Image edit** | `{ type: 'image', method: 'image_edit' }` | `nano-banana-2-edit`, `gpt-image-2-edit`, `nano-banana-pro-edit` |
+| **Image generation** | `{ type: 'image', method: 'image_generation' }` | `nano-banana-2`, `flux-pro-v1.1-ultra`, `imagen-4-ultra` |
+| **Image upscale** | `{ type: 'image', method: 'image_edit' }` | `aura-sr`, `topaz-upscale-image` |
+| **Background removal** | `{ type: 'image', method: 'image_edit' }` | `birefnet-v2`, `ben-v2-image` |
+| **Chat / text** | `{ type: 'text', method: 'chat_completions' }` | `gpt-5-mini`, `claude-haiku-4-5`, `gemini-2.5-flash-lite` |
+| **Vision (multimodal)** | `{ capability: 'vision', method: 'chat_completions' }` | `gemini-2.5-flash`, `gemini-2.5-pro` |
+| **TTS** | `{ type: 'audio', method: 'audio_speech' }` | `tts-1`, `gpt-4o-mini-tts` |
+| **Transcription** | `{ type: 'audio', method: 'audio_transcription' }` | `whisper-1` |
+| **Embeddings** | `{ type: 'embedding', method: 'embeddings' }` | `text-embedding-3-small` |
+| **Video** | `{ type: 'video', method: 'video_generation' }` | `veo-3.1-fast-generate-preview`, `sora-2` |
 
-> Note: the literal IDs in this table are illustrative — proxy versions add/remove the `fal_ai/` prefix and shift naming over time. Pattern-match, don't string-compare.
+Do not infer behavior from an ID's shape. The catalog's `type`, `capabilities`, and `methods` fields are the contract.
 
-### A.3.4 Recommended picker
+### A.3.3 Recommended picker
 
 ```javascript
-function pickModel(ids, task) {
-  const has = (s) => ids.find(id => id.includes(s));
-  const falEdit = (s) => ids.find(id => id.startsWith('fal_ai/') && id.endsWith('/edit') && id.includes(s));
-
-  switch (task) {
-    case 'face-preserving-edit':
-      // Best identity preservation when editing photos of people. Fal-routed only.
-      return falEdit('nano-banana-2') || falEdit('gpt-image-2') || falEdit('nano-banana-pro');
-    case 'image-edit':
-      return falEdit('nano-banana-2') || falEdit('gpt-image-2');
-    case 'image-gen':
-      return has('imagen4/preview/ultra') || has('flux-pro/v1.1-ultra') || has('nano-banana-2');
-    case 'cheap-chat':
-      return has('gpt-5-nano') || has('gemini-2.5-flash-lite');
-    case 'quality-chat':
-      return has('claude-sonnet-4-5') || has('gpt-5.1') || has('gpt-5-mini');
-    case 'tts':
-      return has('tts-1');
-    case 'transcribe':
-      return has('whisper-1');
-  }
+function pickModel(models, task) {
+  const available = new Set(models.map(model => model.id));
+  const preferences = {
+    'face-preserving-edit': ['nano-banana-2-edit', 'gpt-image-2-edit', 'nano-banana-pro-edit'],
+    'image-edit': ['nano-banana-2-edit', 'gpt-image-2-edit'],
+    'image-gen': ['imagen-4-ultra', 'flux-pro-v1.1-ultra', 'nano-banana-2'],
+    'cheap-chat': ['gpt-5-nano', 'gemini-2.5-flash-lite'],
+    'quality-chat': ['claude-sonnet-4-5', 'gpt-5.1', 'gpt-5-mini'],
+    'tts': ['tts-1'],
+    'transcribe': ['whisper-1']
+  };
+  return (preferences[task] || []).find(id => available.has(id)) || null;
 }
 
-const ids = normalizeModels(await AiPass.getModels());
-const editModel = pickModel(ids, 'face-preserving-edit');
+const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
+const editModel = pickModel(data, 'face-preserving-edit');
 if (!editModel) {
   showError("This feature isn't available on your account.");
   return;
 }
 ```
 
-**Do not hardcode model strings.** The single most common breakage is writing `model: 'fal-ai/nano-banana-2/edit'` — missing the `fal_ai/` prefix the proxy actually serves — which returns `400 Invalid model name`. Always discover via `normalizeModels(await AiPass.getModels())`.
+Discover first, then pass the selected stable public ID unchanged to the generation method.
 
 ## A.4 Generate text
 
@@ -270,12 +255,12 @@ Compress images to ~800KB before encoding to keep latency down.
 ## A.6 Generate images (text-to-image)
 
 ```javascript
-const ids = normalizeModels(await AiPass.getModels());
-const model = pickModel(ids, 'image-gen');
+const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_generation' });
+const model = pickModel(data, 'image-gen');
 
 const result = await AiPass.generateImage({
   prompt: 'A futuristic city at sunset, photorealistic',
-  model,                     // e.g. 'imagen4/preview/ultra'
+  model,                     // e.g. 'imagen-4-ultra'
   n: 1,
   size: '1024x1024',
   responseFormat: 'url'      // or 'b64_json'
@@ -294,9 +279,9 @@ This is the bread-and-butter call for any "transform a photo" app (hair styles, 
 ```javascript
 const file = document.getElementById('photo').files[0];
 
-const ids = normalizeModels(await AiPass.getModels());
-const model = pickModel(ids, 'face-preserving-edit');
-//   → 'fal_ai/fal-ai/nano-banana-2/edit'  (Fal-routed Google nano-banana, best for faces)
+const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
+const model = pickModel(data, 'face-preserving-edit');
+// Resolves to a stable public ID such as 'nano-banana-2-edit'.
 
 const result = await AiPass.editImage({
   image: file,                        // single File object
@@ -324,9 +309,9 @@ const url = payload.url || `data:image/png;base64,${payload.b64_json}`;
 const target    = document.getElementById('your-photo').files[0];
 const reference = document.getElementById('reference').files[0];
 
-const ids = normalizeModels(await AiPass.getModels());
-// Both nano-banana-2/edit and gpt-image-2/edit accept multi-image input.
-const model = pickModel(ids, 'image-edit');
+const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
+// Confirm multi-image support for the selected model's input contract.
+const model = pickModel(data, 'image-edit');
 
 const result = await AiPass.editImage({
   image: [target, reference],         // <-- array, not a single file
@@ -336,10 +321,10 @@ const result = await AiPass.editImage({
 });
 ```
 
-**Multi-image-capable models** (verify at runtime via `getModels()`, but as of v2.1 of this skill):
-- `fal_ai/fal-ai/nano-banana-2/edit`
-- `fal_ai/fal-ai/nano-banana-pro/edit`
-- `fal_ai/openai/gpt-image-2/edit`
+**Preferred multi-image edit models** (verify the current catalog and input contract at runtime):
+- `nano-banana-2-edit`
+- `nano-banana-pro-edit`
+- `gpt-image-2-edit`
 
 ## A.9 Audio + embeddings (one-liners)
 
@@ -413,8 +398,8 @@ try {
     return;
   }
   if (/model.*not found/i.test(e.message)) {
-    // You hardcoded a model. Use getModels() instead.
-    console.error('Model not available; falling back via getModels()');
+    // Refresh the metadata-filtered catalog before selecting another stable ID.
+    console.error('Model not available; refresh with getModelCatalog()');
   }
   alert('Something went wrong: ' + e.message);
 }
@@ -520,16 +505,11 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
     // ─── 4. Discover the right model whenever auth state changes ─────────
     async function discoverModel() {
       if (!AiPass.isAuthenticated()) { updateButton(); return; }
-      const raw = await AiPass.getModels();
-      // Defensive normalize (handles both [ids] and {data:[{id}]})
-      const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
-      const ids = arr.map(m => (typeof m === 'string' ? m : m && m.id || '')).filter(Boolean);
-      // Prefer Fal-routed face-preserving edit models.
-      const falEdit = (s) => ids.find(id => id.startsWith('fal_ai/') && id.endsWith('/edit') && id.includes(s));
-      editModel = falEdit('nano-banana-2') || falEdit('gpt-image-2') || falEdit('nano-banana');
+      const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
+      editModel = pickModel(data, 'face-preserving-edit');
       document.getElementById('status').textContent = editModel
-        ? `Ready — using ${editModel}`
-        : '⚠️ No image-edit model available in your account.';
+        ? `Ready: using ${editModel}`
+        : 'No image-edit model is available in your account.';
       updateButton();
     }
 
@@ -725,16 +705,16 @@ If the refresh also fails (e.g. user revoked your app), restart the OAuth flow f
 
 ## B.7 Discover models at runtime
 
-Same rule as Path A: **never hardcode model strings**. List and filter:
+Same rule as Path A: discover the catalog and filter by metadata instead of provider-name patterns:
 
 ```bash
-curl https://aipass.one/oauth2/v1/models \
+curl "https://aipass.one/oauth2/v1/models?type=image&method=image_edit" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
-  | jq '.data[] | select(.id | endswith("/edit")) | .id'
-# Returns the available image-edit model IDs.
+  | jq -r '.data[].id'
+# Returns the available stable public image-edit IDs.
 ```
 
-See the [filter table in Path A.3](#a3-discover-models-at-runtime--do-not-hardcode-model-strings) for the full set of patterns.
+The default response is the OpenAI-compatible envelope. Use `?detailed=false` only when an older client explicitly needs the historical string array. See the [filter table in Path A.3](#a3-discover-models-at-runtime) for more catalog filters.
 
 ## B.8 Image generation (REST)
 
@@ -743,7 +723,7 @@ curl -X POST https://aipass.one/oauth2/v1/images/generations \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "imagen4/preview/ultra",
+    "model": "imagen-4-ultra",
     "prompt": "A futuristic city at sunset",
     "size": "1024x1024",
     "n": 1,
@@ -761,7 +741,7 @@ curl -X POST https://aipass.one/oauth2/v1/images/edits \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -F "image=@selfie.jpg" \
   -F "prompt=Change the hairstyle to a sleek bob cut. Preserve the face and lighting." \
-  -F "model=fal_ai/fal-ai/nano-banana-2/edit" \
+  -F "model=nano-banana-2-edit" \
   -F "size=1024x1024" \
   -F "response_format=url"
 ```
@@ -774,7 +754,7 @@ with open("selfie.jpg", "rb") as f:
         headers={"Authorization": f"Bearer {access_token}"},
         files={"image": f},
         data={
-            "model": "fal_ai/fal-ai/nano-banana-2/edit",
+            "model": "nano-banana-2-edit",
             "prompt": "Change the hairstyle to a sleek bob cut. Preserve the face and lighting.",
             "size": "1024x1024",
             "response_format": "url",
@@ -785,7 +765,7 @@ url = r.json()["data"][0].get("url") or f"data:image/png;base64,{r.json()['data'
 
 ## B.10 Image editing (REST) — multi-image
 
-Pass multiple `-F image=@…` for models that support multi-image input (`fal_ai/fal-ai/nano-banana-2/edit`, `fal_ai/openai/gpt-image-2/edit`, `fal_ai/fal-ai/nano-banana-pro/edit`):
+Pass multiple `-F image=@…` for models that support multi-image input (`nano-banana-2-edit`, `gpt-image-2-edit`, `nano-banana-pro-edit`):
 
 ```bash
 curl -X POST https://aipass.one/oauth2/v1/images/edits \
@@ -793,7 +773,7 @@ curl -X POST https://aipass.one/oauth2/v1/images/edits \
   -F "image=@target.jpg" \
   -F "image=@reference.jpg" \
   -F "prompt=Apply the hairstyle from the second image to the person in the first." \
-  -F "model=fal_ai/fal-ai/nano-banana-2/edit"
+  -F "model=nano-banana-2-edit"
 ```
 
 The server treats repeated `image` form fields as an array.
@@ -911,11 +891,10 @@ curl -X POST "https://aipass.one/oauth2/revoke?token=$ACCESS_TOKEN" \
 These are real mistakes real builders have made — listed so you can avoid them:
 
 ```bash
-# ❌ Hardcoding model strings
-#    Models change. Production may not have the model you hardcoded.
-#    ALWAYS list at runtime via /v1/models and filter by ID convention.
-{ "model": "gpt-image-1" }              # may be deprecated
-{ "model": "fal_ai/fal-ai/nano-banana-2/edit"} # CORRECT only if discovered via /v1/models
+# Wrong: selecting by an assumed provider prefix or name suffix.
+# Query /oauth2/v1/models with type/capability/method filters instead.
+# Use a stable public ID only after it appears in data[].id.
+{ "model": "nano-banana-2-edit" }
 
 # ❌ Token in the URL path (NOT how Bearer auth works)
 curl -X POST https://aipass.one/oauth2/$ACCESS_TOKEN
@@ -935,7 +914,7 @@ const url = payload.url || `data:image/png;base64,${payload.b64_json}`;
 
 # ❌ Assuming editImage only takes a single file
 #    It accepts an ARRAY for multi-image-capable models.
-AiPass.editImage({ image: [file1, file2], ... })   // works on nano-banana-2/edit etc.
+AiPass.editImage({ image: [file1, file2], ... })   // works on supported models such as nano-banana-2-edit
 
 # ❌ Using a placeholder/dummy code_challenge
 # The /oauth2/token call will succeed, but PKCE is not actually verifying anything.

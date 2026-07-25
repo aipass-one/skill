@@ -212,23 +212,32 @@ export async function aipassJson(
 
 Keep forced refresh serialized through the same manager.
 
-## Model Discovery Normalization
+## Model Discovery
+
+The default `/oauth2/v1/models` response is an OpenAI-compatible catalog envelope. Parse `data[].id` as the stable public IDs:
 
 ```ts
-export function normalizeModelIds(payload: unknown): string[] {
-  if (Array.isArray(payload)) {
-    return payload.filter((value): value is string => typeof value === 'string');
+type ModelCatalog = {
+  object: 'list';
+  data: Array<{
+    id: string;
+    type?: string;
+    capabilities?: string[];
+    methods?: string[];
+  }>;
+};
+
+export function modelIdsFromCatalog(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).data)) {
+    throw new Error('AIPASS_INVALID_MODEL_CATALOG');
   }
-  if (payload && typeof payload === 'object' && Array.isArray((payload as any).data)) {
-    return (payload as any).data
-      .map((item: any) => typeof item === 'string' ? item : item?.id)
-      .filter((value: unknown): value is string => typeof value === 'string');
-  }
-  return [];
+  return (payload as ModelCatalog).data
+    .map(model => model.id)
+    .filter(id => typeof id === 'string');
 }
 ```
 
-Cache discovery briefly, provide a configured preference order, and handle the chosen model disappearing.
+Use `type`, `capability`, and `method` query parameters to filter server-side. Only parse a string array when the request explicitly used `?detailed=false`. Cache discovery briefly, provide a configured stable-ID preference order, and handle the chosen model disappearing.
 
 ## Chat Provider Adapter
 
