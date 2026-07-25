@@ -147,7 +147,7 @@ GET /oauth2/v1/models
 GET /oauth2/v1/models?type=text&method=chat_completions
 ```
 
-The default response is the OpenAI-compatible `{ "object": "list", "data": [{ "id": "..." }] }` envelope. Map `data[].id` when only stable public IDs are needed. The explicit compatibility query `?detailed=false` returns the historical string array. Use `type`, `capability`, and `method` filters rather than provider prefixes or path suffixes.
+The default response is the OpenAI-compatible `{ "object": "list", "data": [{ "id": "..." }] }` envelope. Map `data[].id` when only stable public IDs are needed. The explicit compatibility query `?detailed=false` returns the historical string array. Generic provider adapters may normalize both shapes during rolling upgrades. Use `type`, `capability`, and `method` filters rather than provider prefixes or path suffixes.
 
 Chat completion:
 

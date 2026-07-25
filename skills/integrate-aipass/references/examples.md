@@ -227,17 +227,20 @@ type ModelCatalog = {
   }>;
 };
 
-export function modelIdsFromCatalog(payload: unknown): string[] {
-  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as any).data)) {
-    throw new Error('AIPASS_INVALID_MODEL_CATALOG');
+export function normalizeModelIds(payload: unknown): string[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((value): value is string => typeof value === 'string');
   }
-  return (payload as ModelCatalog).data
-    .map(model => model.id)
-    .filter(id => typeof id === 'string');
+  if (payload && typeof payload === 'object' && Array.isArray((payload as any).data)) {
+    return (payload as ModelCatalog).data
+      .map(model => model.id)
+      .filter((id): id is string => typeof id === 'string');
+  }
+  throw new Error('AIPASS_INVALID_MODEL_CATALOG');
 }
 ```
 
-Use `type`, `capability`, and `method` query parameters to filter server-side. Only parse a string array when the request explicitly used `?detailed=false`. Cache discovery briefly, provide a configured stable-ID preference order, and handle the chosen model disappearing.
+Use `type`, `capability`, and `method` query parameters to filter server-side. A string array is returned only when the request explicitly uses `?detailed=false`; accepting both shapes is useful for rolling upgrades and generic provider adapters. Cache discovery briefly, provide a configured stable-ID preference order, and handle the chosen model disappearing.
 
 ## Chat Provider Adapter
 
