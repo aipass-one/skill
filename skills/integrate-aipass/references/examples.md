@@ -201,6 +201,7 @@ export async function aipassJson(
       headers: {
         ...init.headers,
         Authorization: `Bearer ${token}`,
+        'X-AIPass-OAuth-Client-Id': process.env.AIPASS_CLIENT_ID!,
       },
     });
     if (response.status !== 401 || attempt === 1) return response;
@@ -214,7 +215,7 @@ Keep forced refresh serialized through the same manager.
 
 ## Model Discovery
 
-The default `/oauth2/v1/models` response is an OpenAI-compatible catalog envelope. Parse `data[].id` as the stable public IDs:
+The default `/v1/models` response is an OpenAI-compatible catalog envelope. Parse `data[].id` as the stable public IDs:
 
 ```ts
 type ModelCatalog = {
@@ -251,7 +252,7 @@ export async function generateWithAiPass(input: {
   messages: Array<{ role: string; content: unknown }>;
   signal?: AbortSignal;
 }) {
-  const response = await aipassJson(input.userId, '/oauth2/v1/chat/completions', {
+  const response = await aipassJson(input.userId, '/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

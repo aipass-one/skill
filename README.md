@@ -46,16 +46,16 @@ For scripts, tools, agents that call AI models for the developer running them.
 
 1. Get your API key: [aipass.one/panel/developer.html](https://aipass.one/panel/developer.html)
 2. Set env var: `export AIPASS_API_KEY=your_key_here`
-3. Base URL: `https://aipass.one/apikey/v1`
+3. Base URL: `https://aipass.one/v1`
 
 ---
 
 ## Available Models
 
-Discover the current catalog at runtime. Both model-list routes return the OpenAI-compatible `{ "object": "list", "data": [...] }` envelope by default:
+Discover the current catalog at runtime. The model-list route returns the OpenAI-compatible `{ "object": "list", "data": [...] }` envelope by default:
 
 ```bash
-curl -sS "https://aipass.one/apikey/v1/models" \
+curl -sS "https://aipass.one/v1/models" \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   | jq -r '.data[] | [.id, .type, (.methods | join(","))] | @tsv'
 ```
@@ -99,7 +99,7 @@ Use `type`, `capability`, and `method` query parameters to narrow the result. Th
 | `seedream-v3` | ByteDance |
 | `dreamina-v3.1` | ByteDance |
 
-> **Tip:** filter `/apikey/v1/models` by catalog metadata. Do not infer behavior from a provider prefix or path suffix.
+> **Tip:** filter `/v1/models` by catalog metadata. Do not infer behavior from a provider prefix or path suffix.
 
 ### ✏️ Image Editing
 
@@ -113,7 +113,7 @@ Use `type`, `capability`, and `method` query parameters to narrow the result. Th
 
 Image-edit models expose `image_edit` in their catalog `methods`. Public IDs are provider-neutral and use stable names such as `nano-banana-2-edit`; private provider routes are never discovery output. Multi-image input uses repeated `image` form fields (REST) or a `File[]` array (SDK).
 
-Discover with `/apikey/v1/models?type=image&method=image_edit`, then choose from the returned stable IDs. See the [`aipass-oauth-app` skill](skills/aipass-oauth-app/SKILL.md) for SDK catalog filtering and selection.
+Discover with `/v1/models?type=image&method=image_edit`, then choose from the returned stable IDs. See the [`aipass-oauth-app` skill](skills/aipass-oauth-app/SKILL.md) for SDK catalog filtering and selection.
 
 ### 🔊 Text-to-Speech
 
@@ -152,7 +152,7 @@ Discover with `/apikey/v1/models?type=image&method=image_edit`, then choose from
 
 ### Text Generation
 ```bash
-curl -X POST https://aipass.one/apikey/v1/chat/completions \
+curl -X POST https://aipass.one/v1/chat/completions \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "gpt-5-mini", "messages": [{"role": "user", "content": "Hello!"}]}'
@@ -160,7 +160,7 @@ curl -X POST https://aipass.one/apikey/v1/chat/completions \
 
 ### Image Generation
 ```bash
-curl -X POST https://aipass.one/apikey/v1/images/generations \
+curl -X POST https://aipass.one/v1/images/generations \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "flux-pro-v1.1", "prompt": "A futuristic city", "size": "1024x1024", "n": 1}'
@@ -168,7 +168,7 @@ curl -X POST https://aipass.one/apikey/v1/images/generations \
 
 ### List All Models
 ```bash
-curl https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_API_KEY"
+curl https://aipass.one/v1/models -H "Authorization: Bearer $AIPASS_API_KEY"
 ```
 
 ---
@@ -182,14 +182,14 @@ For products where end users sign in to **their** AI Pass account and AI calls a
 1. Register an OAuth2 client: [aipass.one/panel/developer.html](https://aipass.one/panel/developer.html) → **OAuth2 Clients** → **Create Client**
 2. Save your `client_id` and (for confidential clients) `client_secret`
 3. Add a `redirect_uri` — e.g. `https://yourapp.com/callback`, `myapp://auth/callback`, `http://localhost:3000/callback`
-4. Base URL: `https://aipass.one/oauth2/v1`
+4. Resource base URL: `https://aipass.one/v1`
 
 ### The flow
 
 ```
 Generate PKCE → /oauth2/authorize → user signs in → /oauth2/token (exchange code)
                                                   → access_token + refresh_token
-                                                  → call /oauth2/v1/* with Bearer token
+                                                  → call /v1/* with Bearer token
 ```
 
 CORS is open on `/oauth2/token`, so browser-only apps can exchange codes without a backend.
@@ -200,21 +200,23 @@ CORS is open on `/oauth2/token`, so browser-only apps can exchange codes without
 
 ```bash
 # ✅ Correct
-curl -X POST https://aipass.one/oauth2/v1/chat/completions \
+curl -X POST https://aipass.one/v1/chat/completions \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "X-AIPass-OAuth-Client-Id: $CLIENT_ID" \
   -H "Content-Type: application/json" \
   -d '{"model": "gpt-5-mini", "messages": [{"role": "user", "content": "Hello!"}]}'
 
 # ❌ Common mistakes
 curl -X POST https://aipass.one/oauth2/$ACCESS_TOKEN              # token in URL path
-curl /oauth2/v1/chat/completions                                  # missing Authorization header
-curl -H "Authorization: Bearer $ACCESS_TOKEN" \
-  https://aipass.one/apikey/v1/chat/completions                   # wrong namespace (that's the API-key path)
+curl /v1/chat/completions                                         # missing Authorization header
+curl https://aipass.one/v1/chat/completions/$ACCESS_TOKEN         # token in the resource URL
 ```
 
 ### Allowed endpoints
 
-`/oauth2/v1/{models, chat/completions, embeddings, images/generations, images/edits, images/variations, audio/speech, audio/transcriptions, videos, videos/{id}, videos/{id}/content, videos/{id}/remix}`, plus `/oauth2/userinfo` (with `profile:read` scope) and `/api/v1/usage/me/summary`.
+`/v1/{models, chat/completions, embeddings, images/generations, images/edits, images/variations, audio/speech, audio/transcriptions, videos, videos/{id}, videos/{id}/content, videos/{id}/remix}`, plus `/oauth2/userinfo` (with `profile:read` scope) and `/api/v1/usage/me/summary`.
+
+The canonical `/v1/*` resource API accepts either credential type in the Bearer header. Existing `/apikey/v1/*` and `/oauth2/v1/*` resource URLs remain supported as compatibility aliases, each with its previous credential contract. OAuth protocol endpoints such as authorize, token, revoke, and userinfo remain under `/oauth2/*`.
 
 See the full skill (`skills/aipass-oauth-app/SKILL.md`) for code examples in JS/Python/Dart, refresh logic, streaming, and the complete common-mistakes list.
 

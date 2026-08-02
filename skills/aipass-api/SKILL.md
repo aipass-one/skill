@@ -1,7 +1,7 @@
 ---
 name: aipass-api
 description: Complete AI Pass API skill for text, image, image-edit, TTS, STT, and video. Uses API key auth — no browser, no OAuth. For when YOU are calling AI for yourself. If you're building an app where YOUR users sign in, use `aipass-oauth-app` instead.
-version: 2.0.0
+version: 2.1.0
 ---
 
 # AI Pass API — Complete Skill
@@ -15,14 +15,17 @@ All endpoints: `Authorization: Bearer $AIPASS_API_KEY`
 Get your key: https://aipass.one/panel/developer.html → API Keys
 
 ## Base URL
-`https://aipass.one/apikey/v1`
+`https://aipass.one/v1`
+
+The shared `/v1` resource API selects API-key authentication from the bearer
+token. Existing `/apikey/v1` URLs remain supported as compatibility aliases.
 
 ## List Available Models
 
 The default response is the OpenAI-compatible `{ "object": "list", "data": [...] }` envelope. Filter by catalog metadata instead of provider-name patterns:
 
 ```bash
-curl -sS "https://aipass.one/apikey/v1/models?type=image&method=image_generation" \
+curl -sS "https://aipass.one/v1/models?type=image&method=image_generation" \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   | jq -r '.data[].id'
 ```
@@ -105,10 +108,10 @@ Confirm each ID through runtime discovery before use.
 
 ## 1. Text Generation (Chat Completions)
 
-**Endpoint:** `POST /apikey/v1/chat/completions`
+**Endpoint:** `POST /v1/chat/completions`
 
 ```bash
-curl -s -X POST https://aipass.one/apikey/v1/chat/completions \
+curl -s -X POST https://aipass.one/v1/chat/completions \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -128,7 +131,7 @@ import requests, os
 AIPASS_API_KEY = os.environ["AIPASS_API_KEY"]
 
 def chat(prompt, model="gpt-5-mini", system="You are a helpful assistant."):
-    r = requests.post("https://aipass.one/apikey/v1/chat/completions",
+    r = requests.post("https://aipass.one/v1/chat/completions",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "messages": [
             {"role": "system", "content": system},
@@ -141,10 +144,10 @@ def chat(prompt, model="gpt-5-mini", system="You are a helpful assistant."):
 
 ## 2. Image Generation
 
-**Endpoint:** `POST /apikey/v1/images/generations`
+**Endpoint:** `POST /v1/images/generations`
 
 ```bash
-curl -s -X POST https://aipass.one/apikey/v1/images/generations \
+curl -s -X POST https://aipass.one/v1/images/generations \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -160,7 +163,7 @@ curl -s -X POST https://aipass.one/apikey/v1/images/generations \
 ### Python
 ```python
 def generate_image(prompt, model="flux-pro-v1.1", size="1024x1024"):
-    r = requests.post("https://aipass.one/apikey/v1/images/generations",
+    r = requests.post("https://aipass.one/v1/images/generations",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "prompt": prompt, "size": size, "n": 1})
     return r.json()["data"][0]["url"]
@@ -168,7 +171,7 @@ def generate_image(prompt, model="flux-pro-v1.1", size="1024x1024"):
 
 ### Download image
 ```bash
-URL=$(curl -s -X POST https://aipass.one/apikey/v1/images/generations \
+URL=$(curl -s -X POST https://aipass.one/v1/images/generations \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"flux-pro-v1.1","prompt":"your prompt","size":"1024x1024","n":1}' \
@@ -180,9 +183,9 @@ curl -s "$URL" -o output.png
 
 ## 3. Image Editing
 
-**Endpoint:** `POST /apikey/v1/chat/completions` (routes through chat completions for Gemini image models)
+**Endpoint:** `POST /v1/chat/completions` (routes through chat completions for Gemini image models)
 
-⚠️ **Note:** The `/apikey/v1/images/edits` endpoint has a known bug. Use chat completions with base64 image instead.
+⚠️ **Note:** The `/v1/images/edits` endpoint has a known bug. Use chat completions with base64 image instead.
 
 ```python
 import base64
@@ -194,7 +197,7 @@ def edit_image(image_path, prompt, model="gemini-3-pro-image-preview"):
     ext = image_path.rsplit(".", 1)[-1].lower()
     mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
     
-    r = requests.post("https://aipass.one/apikey/v1/chat/completions",
+    r = requests.post("https://aipass.one/v1/chat/completions",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={
             "model": model,
@@ -212,7 +215,7 @@ def edit_image(image_path, prompt, model="gemini-3-pro-image-preview"):
 ### Bash
 ```bash
 B64=$(base64 -w0 input.png)
-curl -s -X POST https://aipass.one/apikey/v1/chat/completions \
+curl -s -X POST https://aipass.one/v1/chat/completions \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -228,12 +231,12 @@ curl -s -X POST https://aipass.one/apikey/v1/chat/completions \
 
 ## 4. Text-to-Speech
 
-**Endpoint:** `POST /apikey/v1/audio/speech`
+**Endpoint:** `POST /v1/audio/speech`
 
 **Voices:** `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`
 
 ```bash
-curl -s -X POST https://aipass.one/apikey/v1/audio/speech \
+curl -s -X POST https://aipass.one/v1/audio/speech \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -246,7 +249,7 @@ curl -s -X POST https://aipass.one/apikey/v1/audio/speech \
 ### Python
 ```python
 def text_to_speech(text, voice="nova", model="tts-1", output="speech.mp3"):
-    r = requests.post("https://aipass.one/apikey/v1/audio/speech",
+    r = requests.post("https://aipass.one/v1/audio/speech",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "input": text, "voice": voice})
     with open(output, "wb") as f:
@@ -258,12 +261,12 @@ def text_to_speech(text, voice="nova", model="tts-1", output="speech.mp3"):
 
 ## 5. Audio Transcription (Speech-to-Text)
 
-**Endpoint:** `POST /apikey/v1/audio/transcriptions`
+**Endpoint:** `POST /v1/audio/transcriptions`
 
 **Formats:** mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg
 
 ```bash
-curl -s -X POST https://aipass.one/apikey/v1/audio/transcriptions \
+curl -s -X POST https://aipass.one/v1/audio/transcriptions \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -F "file=@audio.mp3" \
   -F "model=whisper-1" \
@@ -276,7 +279,7 @@ curl -s -X POST https://aipass.one/apikey/v1/audio/transcriptions \
 ```python
 def transcribe(file_path, language="en"):
     with open(file_path, "rb") as f:
-        r = requests.post("https://aipass.one/apikey/v1/audio/transcriptions",
+        r = requests.post("https://aipass.one/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {AIPASS_API_KEY}"},
             files={"file": f},
             data={"model": "whisper-1", "language": language})
@@ -287,7 +290,7 @@ def transcribe(file_path, language="en"):
 
 ## 6. Video Generation (Async)
 
-**Endpoint:** `POST /apikey/v1/videos`
+**Endpoint:** `POST /v1/videos`
 
 Video generation is async — start, poll, download.
 
@@ -296,14 +299,14 @@ import time
 
 def generate_video(prompt, model="veo-3.1-fast-generate-preview", seconds=5):
     # Start
-    r = requests.post("https://aipass.one/apikey/v1/videos",
+    r = requests.post("https://aipass.one/v1/videos",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "prompt": prompt, "seconds": seconds})
     video_id = r.json()["videoId"]
     
     # Poll
     while True:
-        status = requests.get(f"https://aipass.one/apikey/v1/videos/{video_id}/status",
+        status = requests.get(f"https://aipass.one/v1/videos/{video_id}/status",
             headers={"Authorization": f"Bearer {AIPASS_API_KEY}"}).json()
         if status["status"] == "completed":
             return status["downloadUrl"]
@@ -315,14 +318,14 @@ def generate_video(prompt, model="veo-3.1-fast-generate-preview", seconds=5):
 ### Bash
 ```bash
 # Start video generation
-VIDEO_ID=$(curl -s -X POST https://aipass.one/apikey/v1/videos \
+VIDEO_ID=$(curl -s -X POST https://aipass.one/v1/videos \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"veo-3.1-fast-generate-preview","prompt":"A monster dancing in the rain","seconds":5}' \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['videoId'])")
 
 # Poll status
-curl -s "https://aipass.one/apikey/v1/videos/$VIDEO_ID/status" \
+curl -s "https://aipass.one/v1/videos/$VIDEO_ID/status" \
   -H "Authorization: Bearer $AIPASS_API_KEY"
 ```
 
@@ -343,10 +346,10 @@ curl -s "https://aipass.one/apikey/v1/videos/$VIDEO_ID/status" \
 
 ## 7. Text Embeddings
 
-**Endpoint:** `POST /apikey/v1/embeddings`
+**Endpoint:** `POST /v1/embeddings`
 
 ```bash
-curl -s -X POST https://aipass.one/apikey/v1/embeddings \
+curl -s -X POST https://aipass.one/v1/embeddings \
   -H "Authorization: Bearer $AIPASS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -360,14 +363,14 @@ curl -s -X POST https://aipass.one/apikey/v1/embeddings \
 ### Python
 ```python
 def embed(text, model="text-embedding-3-small"):
-    r = requests.post("https://aipass.one/apikey/v1/embeddings",
+    r = requests.post("https://aipass.one/v1/embeddings",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "input": text})
     return r.json()["data"][0]["embedding"]
 
 # Batch embedding
 def embed_batch(texts, model="text-embedding-3-small"):
-    r = requests.post("https://aipass.one/apikey/v1/embeddings",
+    r = requests.post("https://aipass.one/v1/embeddings",
         headers={"Authorization": f"Bearer {AIPASS_API_KEY}", "Content-Type": "application/json"},
         json={"model": model, "input": texts})
     return [d["embedding"] for d in r.json()["data"]]

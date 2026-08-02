@@ -1,7 +1,7 @@
 ---
 name: aipass-oauth-app
 description: Build apps where YOUR users sign in via AI Pass and you call AI on their behalf (OAuth2 + PKCE). Use this when you're shipping a product to other people. If you're calling AI for yourself, use `aipass-api` instead.
-version: 2.2.0
+version: 2.3.0
 ---
 
 # AI Pass OAuth — Build Apps for Other Users
@@ -567,6 +567,10 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
 
 For native mobile apps, server-side calls, or anywhere you can't load the browser SDK. You implement PKCE yourself.
 
+The canonical resource base is `https://aipass.one/v1` for both OAuth access tokens and API keys. The legacy `/oauth2/v1` and `/apikey/v1` resource paths remain supported as compatibility aliases, each with its previous credential contract. OAuth protocol endpoints such as `/oauth2/authorize`, `/oauth2/token`, and `/oauth2/userinfo` do not move.
+
+For raw OAuth resource calls, also send `X-AIPass-OAuth-Client-Id: YOUR_CLIENT_ID` when practical. This binds the access token to the expected OAuth client; it is not an authentication-type selector.
+
 ## B.1 Auth flow (5 steps)
 
 ```
@@ -576,7 +580,7 @@ For native mobile apps, server-side calls, or anywhere you can't load the browse
 4. AI Pass redirects back with ?code=...   [browser → your callback]
 5. Exchange code for tokens                [your code]
    → got access_token + refresh_token
-6. Call /oauth2/v1/* with Bearer header    [your code]
+6. Call /v1/* with Bearer header           [your code]
 ```
 
 CORS is open on `/oauth2/token`, so browser-only apps can exchange codes without a backend.
@@ -668,7 +672,7 @@ Store both tokens securely (encrypted at rest, never in localStorage/cookies on 
 
 ```bash
 # ✅ CORRECT
-curl -X POST https://aipass.one/oauth2/v1/chat/completions \
+curl -X POST https://aipass.one/v1/chat/completions \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -680,7 +684,7 @@ curl -X POST https://aipass.one/oauth2/v1/chat/completions \
 ```python
 import requests
 r = requests.post(
-    "https://aipass.one/oauth2/v1/chat/completions",
+    "https://aipass.one/v1/chat/completions",
     headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
     json={"model": "gpt-5-mini", "messages": [{"role": "user", "content": "Hello!"}]},
 )
@@ -708,7 +712,7 @@ If the refresh also fails (e.g. user revoked your app), restart the OAuth flow f
 Same rule as Path A: discover the catalog and filter by metadata instead of provider-name patterns:
 
 ```bash
-curl "https://aipass.one/oauth2/v1/models?type=image&method=image_edit" \
+curl "https://aipass.one/v1/models?type=image&method=image_edit" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   | jq -r '.data[].id'
 # Returns the available stable public image-edit IDs.
@@ -719,7 +723,7 @@ The default response is the OpenAI-compatible envelope. Use `?detailed=false` on
 ## B.8 Image generation (REST)
 
 ```bash
-curl -X POST https://aipass.one/oauth2/v1/images/generations \
+curl -X POST https://aipass.one/v1/images/generations \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -737,7 +741,7 @@ curl -X POST https://aipass.one/oauth2/v1/images/generations \
 ## B.9 Image editing (REST) — single image
 
 ```bash
-curl -X POST https://aipass.one/oauth2/v1/images/edits \
+curl -X POST https://aipass.one/v1/images/edits \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -F "image=@selfie.jpg" \
   -F "prompt=Change the hairstyle to a sleek bob cut. Preserve the face and lighting." \
@@ -750,7 +754,7 @@ curl -X POST https://aipass.one/oauth2/v1/images/edits \
 import requests
 with open("selfie.jpg", "rb") as f:
     r = requests.post(
-        "https://aipass.one/oauth2/v1/images/edits",
+        "https://aipass.one/v1/images/edits",
         headers={"Authorization": f"Bearer {access_token}"},
         files={"image": f},
         data={
@@ -768,7 +772,7 @@ url = r.json()["data"][0].get("url") or f"data:image/png;base64,{r.json()['data'
 Pass multiple `-F image=@…` for models that support multi-image input (`nano-banana-2-edit`, `gpt-image-2-edit`, `nano-banana-pro-edit`):
 
 ```bash
-curl -X POST https://aipass.one/oauth2/v1/images/edits \
+curl -X POST https://aipass.one/v1/images/edits \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -F "image=@target.jpg" \
   -F "image=@reference.jpg" \
@@ -780,7 +784,7 @@ The server treats repeated `image` form fields as an array.
 
 ## B.11 Vision (multimodal chat)
 
-Same `/oauth2/v1/chat/completions` endpoint, but `content` is an array:
+Same `/v1/chat/completions` endpoint, but `content` is an array:
 
 ```json
 {
@@ -808,7 +812,7 @@ data: [DONE]
 ```
 
 ```javascript
-const r = await fetch("https://aipass.one/oauth2/v1/chat/completions", {
+const r = await fetch("https://aipass.one/v1/chat/completions", {
   method: "POST",
   headers: {"Authorization": `Bearer ${token}`, "Content-Type": "application/json"},
   body: JSON.stringify({model: "gpt-5-mini", messages: [...], stream: true}),
@@ -833,21 +837,21 @@ while (true) {
 
 ```bash
 # TTS
-curl -X POST https://aipass.one/oauth2/v1/audio/speech \
+curl -X POST https://aipass.one/v1/audio/speech \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"model":"tts-1","input":"Hello world","voice":"nova","response_format":"mp3"}' \
   --output speech.mp3
 
 # Transcribe
-curl -X POST https://aipass.one/oauth2/v1/audio/transcriptions \
+curl -X POST https://aipass.one/v1/audio/transcriptions \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -F "file=@audio.mp3" \
   -F "model=whisper-1" \
   -F "language=en"
 
 # Embeddings
-curl -X POST https://aipass.one/oauth2/v1/embeddings \
+curl -X POST https://aipass.one/v1/embeddings \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"model":"text-embedding-3-small","input":["First text","Second text"]}'
@@ -892,21 +896,20 @@ These are real mistakes real builders have made — listed so you can avoid them
 
 ```bash
 # Wrong: selecting by an assumed provider prefix or name suffix.
-# Query /oauth2/v1/models with type/capability/method filters instead.
+# Query /v1/models with type/capability/method filters instead.
 # Use a stable public ID only after it appears in data[].id.
 { "model": "nano-banana-2-edit" }
 
 # ❌ Token in the URL path (NOT how Bearer auth works)
 curl -X POST https://aipass.one/oauth2/$ACCESS_TOKEN
-curl https://aipass.one/oauth2/v1/chat/completions/$ACCESS_TOKEN
+curl https://aipass.one/v1/chat/completions/$ACCESS_TOKEN
 
-# ❌ Calling /apikey/v1/* with an OAuth access token
-# /apikey/v1/* is for API-key auth (the `aipass-api` skill).
-# /oauth2/v1/* is for OAuth access tokens. Use the right namespace.
+# ✅ Use the shared canonical resource path with an OAuth access token.
+# The server identifies the credential from the Bearer token. The two older
+# resource prefixes remain credential-specific aliases, but new code should use /v1/*.
 curl -H "Authorization: Bearer $ACCESS_TOKEN" \
-  https://aipass.one/apikey/v1/chat/completions   # WRONG namespace
-curl -H "Authorization: Bearer $ACCESS_TOKEN" \
-  https://aipass.one/oauth2/v1/chat/completions   # CORRECT
+  -H "X-AIPass-OAuth-Client-Id: $CLIENT_ID" \
+  https://aipass.one/v1/chat/completions
 
 # ❌ Only handling `url` in image responses, ignoring `b64_json`
 #    Different models return different shapes. ALWAYS handle both:
@@ -936,7 +939,7 @@ AiPass.editImage({ image: [file1, file2], ... })   // works on supported models 
 
 # All allowed endpoints
 
-All require `Authorization: Bearer ACCESS_TOKEN` and `api:access` scope. Base URL: `https://aipass.one/oauth2/v1`
+All require `Authorization: Bearer ACCESS_TOKEN` and `api:access` scope. Base URL: `https://aipass.one/v1`
 
 | Category | Endpoint | Notes |
 |---|---|---|

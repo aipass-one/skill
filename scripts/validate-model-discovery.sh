@@ -13,7 +13,7 @@ files=(
   "$repo_root/skills/integrate-aipass/references/examples.md"
 )
 
-forbidden='(fal_ai|fal-ai|openai|gemini|imagen4|flux-pro|recraft|seedream|dreamina|standard|cerebras)/|normalizeModels\(|endsWith\([^)]*/edit|endswith\([^)]*/edit|https://aipass\.one/v1/models|GET /v1/models|/proxy/v1/models|nano-banana-2/edit|gpt-image-2/edit|nano-banana-pro/edit'
+forbidden='(fal_ai|fal-ai|openai|gemini|imagen4|flux-pro|recraft|seedream|dreamina|standard|cerebras)/|normalizeModels\(|endsWith\([^)]*/edit|endswith\([^)]*/edit|/proxy/v1/models|nano-banana-2/edit|gpt-image-2/edit|nano-banana-pro/edit'
 
 if rg -n "$forbidden" "${files[@]}"; then
   printf 'Active skills contain a private model route alias or obsolete discovery pattern.\n' >&2

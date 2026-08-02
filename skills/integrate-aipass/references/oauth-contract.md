@@ -14,14 +14,14 @@ GET https://aipass.one/.well-known/oauth-authorization-server
 | Token exchange/refresh | `https://aipass.one/oauth2/token` |
 | User info | `https://aipass.one/oauth2/userinfo` |
 | Revocation | `https://aipass.one/oauth2/revoke` |
-| OAuth model proxy | `https://aipass.one/oauth2/v1` |
+| Shared model API | `https://aipass.one/v1` |
 | Balance | `https://aipass.one/api/v1/usage/me/summary` |
 | Checkout | `https://aipass.one/api/v1/payment/create-checkout-session` |
 | Dashboard | `https://aipass.one/panel/dashboard` |
 
 Scopes:
 
-- `api:access`: required for `/oauth2/v1/*` model calls.
+- `api:access`: required for OAuth access-token calls to `/v1/*`.
 - `profile:read`: required for `/oauth2/userinfo`.
 
 The token endpoint supports public-client authentication (`none`) with authorization-code + PKCE and refresh-token grants. Do not add HTTP Basic auth or expose a client secret unless current metadata and client configuration explicitly require a different mode.
@@ -143,8 +143,8 @@ Use `sub` as the durable external identity. Do not key identity by mutable email
 Discover the public model catalog:
 
 ```http
-GET /oauth2/v1/models
-GET /oauth2/v1/models?type=text&method=chat_completions
+GET /v1/models
+GET /v1/models?type=text&method=chat_completions
 ```
 
 The default response is the OpenAI-compatible `{ "object": "list", "data": [{ "id": "..." }] }` envelope. Map `data[].id` when only stable public IDs are needed. The explicit compatibility query `?detailed=false` returns the historical string array. Generic provider adapters may normalize both shapes during rolling upgrades. Use `type`, `capability`, and `method` filters rather than provider prefixes or path suffixes.
@@ -152,8 +152,9 @@ The default response is the OpenAI-compatible `{ "object": "list", "data": [{ "i
 Chat completion:
 
 ```http
-POST /oauth2/v1/chat/completions
+POST /v1/chat/completions
 Authorization: Bearer ACCESS_TOKEN
+X-AIPass-OAuth-Client-Id: CLIENT_ID
 Content-Type: application/json
 
 {
@@ -175,7 +176,7 @@ The proxy uses OpenAI-compatible bodies. Supported proxy routes include:
 - `POST /audio/transcriptions`
 - video create, status, content, and remix routes
 
-Use `/oauth2/v1`, not the API-key namespace `/apikey/v1`.
+Use the canonical `/v1` resource namespace. The server identifies an OAuth access token from the Bearer credential; `/oauth2/v1` and `/apikey/v1` remain compatibility aliases, each with its previous credential contract. OAuth protocol endpoints remain under `/oauth2`.
 
 ## Balance
 
