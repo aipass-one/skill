@@ -43,7 +43,7 @@ For a brokered integration:
 client -> host /aipass/start -> AI Pass authorize -> host /aipass/callback
        -> encrypted identity/token row -> host session
 
-AI action -> host backend -> fresh AI Pass access token -> /oauth2/v1/*
+AI action -> host backend -> fresh AI Pass access token -> /v1/*
 ```
 
 Keep AI Pass credentials out of the client. The client should receive connection state, balance, and host-specific errors—not tokens.
@@ -96,7 +96,7 @@ Never log tokens, authorization codes, PKCE verifiers, or raw secret-bearing res
 
 ### 7. Add the Provider Adapter
 
-Route AI calls through `https://aipass.one/oauth2/v1/*` with the user's bearer token. Preserve the host application's request and response contract so the integration does not break existing features.
+Route AI calls through the shared canonical `https://aipass.one/v1/*` resource API with the user's bearer token. Include `X-AIPass-OAuth-Client-Id` with the configured client ID when practical so the token is bound to the expected client. The legacy `/oauth2/v1/*` and `/apikey/v1/*` resource paths remain compatibility aliases, each with its previous credential contract; OAuth protocol endpoints remain under `/oauth2/*`. Preserve the host application's request and response contract so the integration does not break existing features.
 
 Discover models at runtime. If the product configures a primary and fallback, use the fallback only for a confirmed model-unavailable response. Do not classify auth, balance, validation, timeout, network, or unknown provider errors as model-unavailable.
 

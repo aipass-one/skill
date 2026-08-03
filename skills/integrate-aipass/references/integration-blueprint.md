@@ -14,7 +14,7 @@ Host backend
   OAuth broker     -> start + callback + local session
   identity service -> connection status + source selection
   token manager    -> decrypt + refresh + rotate + persist
-  AI provider      -> /oauth2/v1 adapter
+  AI provider      -> /v1 adapter
   funding router   -> AI Pass versus host credits
   balance service  -> summary + checkout
 
@@ -204,7 +204,7 @@ Create one adapter that accepts the host application's internal generation reque
 Responsibilities:
 
 - obtain a fresh token from the token manager;
-- call the matching `/oauth2/v1/*` endpoint;
+- call the matching shared `/v1/*` endpoint;
 - support abort signals and streaming without issuing a second request;
 - parse OpenAI-compatible success responses;
 - return a typed internal error without leaking token-bearing data;

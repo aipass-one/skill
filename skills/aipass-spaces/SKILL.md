@@ -219,7 +219,7 @@ Then list the available models against your app's needs:
 
 ```bash
 # Use any AI Pass API key — same catalog is served back.
-curl -sS https://aipass.one/apikey/v1/models -H "Authorization: Bearer $AIPASS_API_KEY" \
+curl -sS https://aipass.one/v1/models -H "Authorization: Bearer $AIPASS_API_KEY" \
   | jq -r '.data[].id' | sort
 ```
 
