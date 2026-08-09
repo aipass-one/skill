@@ -1,7 +1,6 @@
 ---
 name: aipass-spaces
-description: Publish self-contained HTML apps to the user's AI Pass Space at aipass.one/spaces/<handle>. Activate when the user asks to "publish an app", "make me an app on AI Pass", "drop this on my space", or hands you an API key together with a handle. You write one HTML file and POST it; AI Pass hosts it, gives it a URL, and the in-app AI Pass SDK handles visitor auth + billing for any AI features inside it.
-version: 1.2.0
+description: Publish self-contained HTML apps to a user's AI Pass Space, using the browser SDK for automatic visitor login, wallet-funded AI, private per-app JSON/files, and user-approved shared vaults between apps. Use when asked to publish or build an app on an AI Pass Space.
 ---
 
 # AI Pass Spaces — App Publishing
@@ -206,6 +205,7 @@ The JS SDK is the contract for everything you build. Before you touch the boiler
 curl -sS https://aipass.one/aipass-sdk.js -o /tmp/aipass-sdk.js
 # Then grep for the methods you'll call:
 grep -n -E "async (generateCompletion|generateImage|editImage|generateSpeech|transcribeAudio|getModels|getModelCatalog)" /tmp/aipass-sdk.js
+grep -n -E "AiPass\.(data|files|shared)|_createSharedNamespace" /tmp/aipass-sdk.js
 grep -n "_ensureAuthenticated" /tmp/aipass-sdk.js  # see exactly which calls gate auth
 ```
 
@@ -268,7 +268,7 @@ async function ask(prompt, outEl) {
 //   const parsed = JSON.parse(r.choices[0].message.content);
 ```
 
-The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`. All of them call `_ensureAuthenticated()` internally — see the "Before you write a single line of HTML — read the SDK" section above. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
+The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`, plus the `AiPass.data`, `AiPass.files`, and `AiPass.shared` storage namespaces. Protected calls authenticate at the API surface — see the "Before you write a single line of HTML — read the SDK" section above. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
 
 ### Per-user data storage (AiPass.data)
 
@@ -289,9 +289,61 @@ The contract:
 
 - **Auth-gates at call time, like generation methods.** `get()`/`set()` run `_ensureAuthenticated()` — a signed-out visitor gets the SDK auth modal and your `await` resumes after login. Works exactly right with `requireLogin: false`; do NOT wrap data calls in `isAuthenticated()` checks (rule 9 applies). Dismissed modal throws `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow it in your `catch`.
 - **Scope is automatic:** (signed-in visitor, this app), derived from the `/spaces/{handle}/{slug}` page URL. One app cannot read another space's data.
-- **Limits:** 100 KB per document, ~30 writes/minute per visitor. **Free** — data calls never spend the visitor's wallet. Save on explicit user action or debounce; never per keystroke.
+- **Limits:** 1 MB per document, ~30 writes/minute per visitor. **Free** — data calls never spend the visitor's wallet. Save on explicit user action or debounce; never per keystroke.
 - **Namespaced API only.** `AiPass.data.get()` / `AiPass.data.set(obj)`. There is no `AiPass.getData()`, `AiPass.saveData()`, or `AiPass.data(...)` — those are hallucinations and will throw.
 - **Optional optimistic concurrency:** `AiPass.data.set(obj, { ifRevision: AiPass.data.revision })` rejects with a revision-conflict error if another tab wrote in between; reload with `get()` and retry. Omit `ifRevision` for last-write-wins (the right default for almost every app).
+
+### Private per-user files (`AiPass.files`)
+
+Keep binary data out of the JSON document:
+
+```javascript
+const saved = await AiPass.files.upload(file, { name: 'reference-photo.jpg' });
+const files = await AiPass.files.list();
+const blob = await AiPass.files.download(saved.id);
+const url = await AiPass.files.getUrl(saved.id); // revoke with URL.revokeObjectURL(url)
+await AiPass.files.remove(saved.id);
+```
+
+Files are scoped automatically to `(signed-in visitor, this Space app)`, are private authenticated
+downloads, and never receive public URLs. Limits are 10 MB/file, 50 MB total, and 100 files per
+visitor/app. Executable web formats are rejected. Storage is free.
+
+### Shared databases and files across apps (`AiPass.shared`)
+
+Use shared vaults only for intentional app-to-app workflows. A vault belongs to the signed-in user
+and contains keyed, revisioned JSON records plus private files. The creator app grants an exact app
+reference; the SDK shows a contextual AI Pass confirmation before the grant is written.
+
+```javascript
+const project = await AiPass.shared.create('Campaign autumn');
+await AiPass.shared.records.set(project.id, 'request:hero', { prompt });
+
+await AiPass.shared.grant(project.id, {
+  appRef: 'space:designer/image-maker',
+  access: 'CONTRIBUTE'
+});
+
+// The granted app, signed in as the same user:
+const projects = await AiPass.shared.list();
+const request = await AiPass.shared.records.get(project.id, 'request:hero');
+const image = await AiPass.shared.files.upload(project.id, generatedBlob, { name: 'hero.png' });
+await AiPass.shared.records.set(project.id, 'result:hero', { fileId: image.id });
+```
+
+- `READ`: list/read records and list/download files.
+- `CONTRIBUTE`: read and add new record keys/files, without overwrite or delete.
+- `READ_WRITE`: read, add, replace, and delete records/files.
+- App references: `oauth:{clientId}`, `app:{catalog-slug}`, or `space:{handle}/{slug}`.
+- Only the creator app can grant/revoke access or delete the vault. Every request remains constrained
+  to the same signed-in user.
+- Limits: 20 vaults/user, 500 records and 1 MB JSON/vault, 20 grants/vault, 10 MB/file, 50 MB files,
+  and 100 files/vault.
+
+Management methods are `list`, `create`, `get`, `remove`, `resolveApp`, `listGrants`, `grant`, and
+`revoke`. Record methods are `records.list/get/set/remove`; file methods are
+`files.list/upload/download/getUrl/remove`. Prefer private `AiPass.data`/`AiPass.files` unless
+cross-app access is a real product feature.
 
 ---
 
@@ -309,6 +361,7 @@ The contract:
 10. **Do NOT pass `maxTokens` to `generateCompletion` / `streamText`** unless you genuinely need to truncate output. Reasoning models (`gpt-5-mini`, `gpt-5`, o-series) count internal reasoning against the cap and silently return `content: null` when it's too low. Omit the field and the model uses its native max (128K out for gpt-5-mini). The SDK no longer ships a default; passing one yourself reintroduces the bug.
 11. **Stream visible chat output via `AiPass.streamText(opts, onToken)`.** It's a one-line wrapper around `generateCompletion({ stream: true })` that renders tokens as they arrive — perceived latency drops from 5–30s of "loading…" to ~50ms per token. Reserve `generateCompletion` for programmatic use only (parsing JSON, branching on usage stats). Example: `await AiPass.streamText({ model, messages }, (full) => { el.textContent = full; });`
 12. **For `gpt-image-2-edit`, pass `quality: 'low'`** unless you genuinely need 'high'. It cuts generation time from ~3–5min to ~30–90s. For grainy / retro / VHS / polaroid trends it's also visually on-brand (the aesthetic IS low resolution). The SDK already client-side-shrinks oversized photos before upload.
+13. **Keep persistence private by default.** Use `AiPass.data` and `AiPass.files` for ordinary app state. Use `AiPass.shared` only for explicit cross-app collaboration, choose the least-powerful grant, and let the SDK display its confirmation dialog. Never store credentials or secrets.
 
 ---
 

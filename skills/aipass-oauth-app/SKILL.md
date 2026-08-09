@@ -1,7 +1,6 @@
 ---
 name: aipass-oauth-app
-description: Build apps where YOUR users sign in via AI Pass and you call AI on their behalf (OAuth2 + PKCE). Use this when you're shipping a product to other people. If you're calling AI for yourself, use `aipass-api` instead.
-version: 2.3.0
+description: Build browser, mobile, desktop, CLI, or server apps where end users connect AI Pass through OAuth2 + PKCE, pay for their own AI calls, and optionally use private app storage or user-approved shared JSON/file vaults. Use when shipping a product to other people; use `aipass-api` instead for personal API-key calls.
 ---
 
 # AI Pass OAuth — Build Apps for Other Users
@@ -64,7 +63,7 @@ Now in your HTML:
     AiPass.initialize({
       clientId: 'client_xxxxxxxxx',  // from step 3
       requireLogin: false             // default. true forces a login modal on page load — bad UX.
-                                      // Use `await AiPass.login()` from your CTA button instead.
+                                      // Protected SDK calls show the login modal when needed.
     });
   </script>
 </body>
@@ -73,39 +72,29 @@ Now in your HTML:
 
 That's the entire auth setup. The SDK handles the OAuth2 + PKCE popup, token storage, refresh, and balance display. You write zero lines of auth code.
 
-## A.2 Auth state — the one thing developers get wrong
+## A.2 Authentication — let protected calls open the SDK modal
 
-> ⚠️ **Critical gotcha.** `aipass:login` fires only on the actual sign-in click. It does **NOT** re-fire when an existing session is restored from storage on page reload. If you enable features only inside that handler, **every returning user will see your app permanently disabled** even though they're signed in. This bug is invisible in local dev (you click login each time) and only burns your real users.
-
-**Correct pattern.** Treat `AiPass.isAuthenticated()` as the source of truth. Sync UI on init + on transition events.
+Initialize with `requireLogin: false` and call the protected SDK method directly from the user's action. Generation, private storage, and shared-vault methods call the SDK authentication gate internally. When signed out, the SDK shows its branded login modal, waits for OAuth, and resumes the original operation without a second click.
 
 ```javascript
-function syncAuthUi() {
-  const isAuth = AiPass.isAuthenticated();
-  // Toggle every auth-dependent piece of UI here.
-  if (isAuth) onLoggedIn();
-  else onLoggedOut();
-}
-
-// 1. Run once immediately — handles restored sessions on page load.
-syncAuthUi();
-
-// 2. Poll briefly to cover async OAuth-callback exchange (popup or redirect return).
-let polls = 0;
-const tick = setInterval(() => {
-  syncAuthUi();
-  if (++polls > 25 || AiPass.isAuthenticated()) clearInterval(tick);
-}, 200);
-
-// 3. Re-sync on transitions.
-document.addEventListener('aipass:login',  syncAuthUi);
-document.addEventListener('aipass:logout', syncAuthUi);
-document.addEventListener('aipass:error',  (e) => console.error(e.detail.error));
-document.addEventListener('aipass:balance', (e) => { /* update wallet display */ });
+document.querySelector('#generate').addEventListener('click', async () => {
+  try {
+    const result = await AiPass.generateCompletion({
+      model: 'gpt-5-mini',
+      prompt: document.querySelector('#prompt').value
+    });
+    renderResult(result);
+  } catch (error) {
+    if (error?.code === 'AUTH_REQUIRED') return; // user dismissed the modal
+    showError(error);
+  }
+});
 ```
 
+Do not disable the action because `AiPass.isAuthenticated()` is false, replace the button with a custom sign-in flow, or wait for `aipass:login` before making the call. Those patterns bypass the automatic gate and commonly leave the UI stale after popup login.
+
 **Direct API.**
-- `AiPass.isAuthenticated()` — boolean. The state. Safe any time after `initialize()`.
+- `AiPass.isAuthenticated()` — optional state for account/status UI, not a prerequisite for protected calls.
 - `AiPass.getAccessToken()` — for raw fetch calls if you bypass the SDK.
 - `await AiPass.login()` / `await AiPass.logout()` — programmatic triggers.
 
@@ -118,14 +107,12 @@ document.addEventListener('aipass:balance', (e) => { /* update wallet display */
 **Anti-pattern to avoid:**
 
 ```javascript
-// ❌ Returning users will be stuck — they never see this fire.
-document.addEventListener('aipass:login', () => {
-  enableGenerateButton();
-  loadModels();
-});
+// ❌ Prevents the protected call from reaching the SDK's automatic auth gate.
+if (!AiPass.isAuthenticated()) {
+  showCustomLoginScreen();
+  return;
+}
 ```
-
-Always pair the event handler with an initial `isAuthenticated()` check.
 
 ## A.3 Discover models at runtime
 
@@ -367,7 +354,19 @@ console.log(`Spent: $${summary.data.totalCost}`);
 
 Cache for 5–10 minutes — no need to poll on every call.
 
-## A.11 Result handling — always check both URL and b64_json
+## A.11 Persistent data, files, and cross-app collaboration
+
+The SDK includes three free, authenticated storage surfaces:
+
+- `AiPass.data`: one private 1 MB JSON document per `(user, app)`.
+- `AiPass.files`: private files for the current app, up to 10 MB/file and 50 MB total.
+- `AiPass.shared`: user-owned named vaults with keyed, revisioned JSON records and private files that the user can grant to other apps as `READ`, `CONTRIBUTE`, or `READ_WRITE`.
+
+Use private storage by default. Use a shared vault only when the product intentionally collaborates with another AI Pass app. `AiPass.shared.grant(...)` shows the user an AI Pass confirmation dialog before changing access.
+
+Read [references/storage.md](references/storage.md) before implementing persistence or app-to-app exchange. It contains the complete method map, quotas, app-reference formats, permission semantics, concurrency pattern, and a Draft/Bupple-style handoff example.
+
+## A.12 Result handling — always check both URL and b64_json
 
 Different models return image responses in different shapes. **Always handle both** or your app will silently break when a model is swapped:
 
@@ -382,7 +381,7 @@ const result = await AiPass.editImage({ /* ... */ });
 const url = extractImageUrl(result.data[0]);
 ```
 
-## A.12 Error handling
+## A.13 Error handling
 
 ```javascript
 try {
@@ -392,11 +391,7 @@ try {
     // SDK already showed the budget UI; you can just bail.
     return;
   }
-  if (/401|unauthor/i.test(e.message)) {
-    // Token expired and refresh failed — kick user to re-login.
-    await AiPass.login();
-    return;
-  }
+  if (e?.code === 'AUTH_REQUIRED') return; // user dismissed the SDK login modal
   if (/model.*not found/i.test(e.message)) {
     // Refresh the metadata-filtered catalog before selecting another stable ID.
     console.error('Model not available; refresh with getModelCatalog()');
@@ -405,7 +400,7 @@ try {
 }
 ```
 
-## A.13 Worked example — full hair-style try-on app
+## A.14 Worked example — full hair-style try-on app
 
 Drop this in a `.html` file, replace `client_id`, open in a browser. Fully functional ~150-line app: discovers models, accepts a selfie, applies a chosen hair style via image-edit, renders the result.
 
@@ -499,12 +494,11 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
 
     function updateButton() {
       document.getElementById('go').disabled =
-        !photoInput.files[0] || !selectedStyle || !AiPass.isAuthenticated();
+        !photoInput.files[0] || !selectedStyle || !editModel;
     }
 
-    // ─── 4. Discover the right model whenever auth state changes ─────────
+    // ─── 4. Discover the right model (catalog discovery is public) ──────
     async function discoverModel() {
-      if (!AiPass.isAuthenticated()) { updateButton(); return; }
       const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
       editModel = pickModel(data, 'face-preserving-edit');
       document.getElementById('status').textContent = editModel
@@ -513,15 +507,7 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
       updateButton();
     }
 
-    // CRITICAL: also runs on init for restored sessions — aipass:login only fires on click.
     discoverModel();
-    let _pollCount = 0;
-    const _poll = setInterval(() => {
-      discoverModel();
-      if (++_pollCount > 25 || AiPass.isAuthenticated()) clearInterval(_poll);
-    }, 200);
-    document.addEventListener('aipass:login',  discoverModel);
-    document.addEventListener('aipass:logout', () => { editModel = null; updateButton(); });
 
     // ─── 5. Run the edit ──────────────────────────────────────────────────
     document.getElementById('go').onclick = async () => {
@@ -548,6 +534,7 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
         resultImg.style.display = 'block';
         status.textContent = '✅ Done';
       } catch (e) {
+        if (e?.code === 'AUTH_REQUIRED') { status.textContent = ''; return; }
         if (e.budgetExceededHandled) return;
         status.textContent = '❌ ' + (e.message || 'Edit failed');
       } finally {
@@ -931,8 +918,10 @@ AiPass.editImage({ image: [file1, file2], ... })   // works on supported models 
 # encrypted secure storage (mobile keychain).
 # (The browser SDK handles this for you — only worry about it on REST path.)
 
-# ❌ Calling AI methods before AiPass.isAuthenticated() returns true
-#    Every call needs a fresh access token. Gate UI on aipass:login event.
+# ❌ Refusing to call a protected method while signed out
+#    This prevents the SDK from showing its automatic login modal. Call the
+#    generation/storage method from the user's action and handle AUTH_REQUIRED
+#    only when the user dismisses the modal.
 ```
 
 ---
@@ -961,6 +950,11 @@ All require `Authorization: Bearer ACCESS_TOKEN` and `api:access` scope. Base UR
 | Token | `POST /oauth2/revoke?token=ACCESS_TOKEN` | Revoke a token |
 
 > Only allowlisted endpoints are proxied. Anything outside this list returns 403/404.
+
+`AiPass.data`, `AiPass.files`, and `AiPass.shared` are authenticated SDK storage namespaces, not
+model-proxy `/v1/*` methods. Use the SDK surface documented in
+[references/storage.md](references/storage.md) so app namespaces and user-approved grants are
+resolved correctly.
 
 ---
 
