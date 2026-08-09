@@ -182,7 +182,8 @@ Every published app MUST include this scaffolding so AI Pass can mount the auth/
     })();
 
     // The SDK pops its own auth modal mid-call if needed (see Rule 9 below).
-    // The only listener you need is for surfacing errors.
+    // Request errors still throw from the method call; balance recovery also
+    // emits aipass:insufficient-balance after the SDK opens the account wallet.
     document.addEventListener('aipass:error', (e) => console.error(e.detail.error));
   </script>
 </body>
@@ -212,6 +213,7 @@ grep -n "_ensureAuthenticated" /tmp/aipass-sdk.js  # see exactly which calls gat
 What you'll find that matters:
 
 - **Auth-gated methods auto-prompt the modal.** Every generation method (`editImage`, `generateImage`, `generateCompletion`, `generateSpeech`, `transcribeAudio`, `generateImageVariations`, `generateVideo`) starts with `await _ensureAuthenticated()`. If the visitor isn't signed in, the SDK opens its dismissible auth-gate modal, *awaits* the OAuth round-trip, then continues the original call. Your `await AiPass.editImage(...)` resolves with the actual result; no re-click required. Dismissed modals throw `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow silently in your `catch`.
+- **Insufficient balance auto-prompts the wallet.** HTTP 402 and standard insufficient-balance responses open the SDK account/balance window automatically. The thrown error has `code === 'INSUFFICIENT_BALANCE'` and `insufficientBalanceHandled === true` (plus `budgetExceededHandled` for compatibility). Preserve the visitor's work, show a retry action, and use `AiPass.openWallet()` only for an explicit “Open wallet” recovery button after dismissal.
 - **`getModels()`, `getModelCatalog()`, and `getModel()` are public.** No auth, no balance hit. `getModels()` returns stable ID strings; `getModelCatalog()` returns the metadata envelope for filtered pickers.
 - **The `<div data-aipass-button>` widget** is the canonical login affordance. The SDK mounts the sign-in button + balance + dropdown menu into it and keeps it in sync with auth state. Put one in your header and you don't need any other login UI — no in-app "Sign in" button, no syncAuth poll.
 
@@ -258,6 +260,10 @@ async function ask(prompt, outEl) {
     );
   } catch (e) {
     if (e && e.code === 'AUTH_REQUIRED') return;  // visitor dismissed the auth modal
+    if (e?.insufficientBalanceHandled || e?.budgetExceededHandled) {
+      outEl.textContent = 'Add AI Pass credit, then try again.';
+      return;
+    }
     throw e;
   }
 }
@@ -362,6 +368,7 @@ cross-app access is a real product feature.
 11. **Stream visible chat output via `AiPass.streamText(opts, onToken)`.** It's a one-line wrapper around `generateCompletion({ stream: true })` that renders tokens as they arrive — perceived latency drops from 5–30s of "loading…" to ~50ms per token. Reserve `generateCompletion` for programmatic use only (parsing JSON, branching on usage stats). Example: `await AiPass.streamText({ model, messages }, (full) => { el.textContent = full; });`
 12. **For `gpt-image-2-edit`, pass `quality: 'low'`** unless you genuinely need 'high'. It cuts generation time from ~3–5min to ~30–90s. For grainy / retro / VHS / polaroid trends it's also visually on-brand (the aesthetic IS low resolution). The SDK already client-side-shrinks oversized photos before upload.
 13. **Keep persistence private by default.** Use `AiPass.data` and `AiPass.files` for ordinary app state. Use `AiPass.shared` only for explicit cross-app collaboration, choose the least-powerful grant, and let the SDK display its confirmation dialog. Never store credentials or secrets.
+14. **Let the SDK own insufficient-balance recovery.** Do not build a second payment modal or preflight `getUserBalance()` before a request. The SDK opens the account wallet on 402. Keep the user's input, show a clear retry state near the failed action, and wire any later “Open wallet” button to `AiPass.openWallet()`.
 
 ---
 
@@ -429,6 +436,10 @@ cat > /tmp/app.html <<'HTML'
         ).join('');
       } catch (e) {
         if (e && e.code === 'AUTH_REQUIRED') { out.innerHTML = ''; return; }
+        if (e?.insufficientBalanceHandled || e?.budgetExceededHandled) {
+          out.textContent = 'Add AI Pass credit, then generate again.';
+          return;
+        }
         out.innerHTML = `<div class="col-span-5 text-rose-300 text-sm">${e.message || 'Something went wrong'}</div>`;
       }
     };

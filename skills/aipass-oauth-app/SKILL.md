@@ -102,6 +102,7 @@ Do not disable the action because `AiPass.isAuthenticated()` is false, replace t
 - `aipass:login` — *transition* event (user just signed in). NOT a state signal. Does not fire on storage-restore.
 - `aipass:logout` — transition (user signed out, or refresh failed).
 - `aipass:balance` — fires periodically and after successful AI calls. `event.detail.balance` is a number.
+- `aipass:insufficient-balance` — the SDK detected an AI request that needs more credit and started wallet recovery.
 - `aipass:error` — auth/OAuth errors only. Does NOT fire for `/v1/*` API errors — those throw from the SDK method call.
 
 **Anti-pattern to avoid:**
@@ -354,6 +355,14 @@ console.log(`Spent: $${summary.data.totalCost}`);
 
 Cache for 5–10 minutes — no need to poll on every call.
 
+Do not preflight balance before generation. The server is authoritative and concurrent requests may change available funds. If an AI request is rejected with HTTP 402 or an insufficient-balance response, the SDK automatically opens the same account wallet used by the header widget. The thrown error is marked with `code: 'INSUFFICIENT_BALANCE'`, `insufficientBalanceHandled: true`, and the legacy `budgetExceededHandled: true` flag.
+
+Preserve the user's work and show a retry action. If the user dismisses the automatic wallet and asks to reopen it, call:
+
+```javascript
+await AiPass.openWallet();
+```
+
 ## A.11 Persistent data, files, and cross-app collaboration
 
 The SDK includes three free, authenticated storage surfaces:
@@ -387,8 +396,10 @@ const url = extractImageUrl(result.data[0]);
 try {
   const result = await AiPass.editImage({ /* ... */ });
 } catch (e) {
-  if (e.budgetExceededHandled) {
-    // SDK already showed the budget UI; you can just bail.
+  if (e.insufficientBalanceHandled || e.budgetExceededHandled) {
+    // The SDK already opened the wallet. Preserve input and show Retry/Open wallet.
+    showInlineMessage('Add AI Pass credit, then try again.');
+    openWalletButton.onclick = () => AiPass.openWallet();
     return;
   }
   if (e?.code === 'AUTH_REQUIRED') return; // user dismissed the SDK login modal
@@ -535,7 +546,10 @@ Drop this in a `.html` file, replace `client_id`, open in a browser. Fully funct
         status.textContent = '✅ Done';
       } catch (e) {
         if (e?.code === 'AUTH_REQUIRED') { status.textContent = ''; return; }
-        if (e.budgetExceededHandled) return;
+        if (e.insufficientBalanceHandled || e.budgetExceededHandled) {
+          status.textContent = 'Add AI Pass credit, then try this style again.';
+          return;
+        }
         status.textContent = '❌ ' + (e.message || 'Edit failed');
       } finally {
         goBtn.disabled = false;
@@ -866,6 +880,8 @@ curl https://aipass.one/api/v1/usage/me/summary \
 
 Cache for 5–10 minutes — no need to poll on every call.
 
+Raw REST clients must handle HTTP 402 themselves. Preserve pending input, show an add-credit route, and retry only after the user asks. The automatic account-wallet modal and `AiPass.openWallet()` belong to the browser SDK path.
+
 ## B.15 Revoke
 
 When a user logs out, revoke the token:
@@ -922,6 +938,11 @@ AiPass.editImage({ image: [file1, file2], ... })   // works on supported models 
 #    This prevents the SDK from showing its automatic login modal. Call the
 #    generation/storage method from the user's action and handle AUTH_REQUIRED
 #    only when the user dismisses the modal.
+
+# ❌ Building a second budget modal or treating HTTP 402 as a generic failure
+#    The browser SDK opens its account wallet automatically. Preserve the user's
+#    work, handle insufficientBalanceHandled, and use AiPass.openWallet() only
+#    for an explicit recovery button after dismissal.
 ```
 
 ---
