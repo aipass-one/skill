@@ -1,6 +1,6 @@
 ---
 name: integrate-aipass
-description: Add AI Pass to an existing multi-user product using OAuth2 + PKCE, secure token storage and refresh, OpenAI-compatible model calls, balance and top-up UI, and safe coexistence with the product's own credits or subscriptions. Use when retrofitting AI Pass login/account linking or pay-as-you-go AI into an established web, mobile, desktop, backend, Edge Function, or WordPress architecture; when replacing direct provider keys with per-user AI Pass billing; or when reviewing and repairing an incomplete AI Pass OAuth integration.
+description: Add AI Pass to an existing multi-user product using OAuth2 + PKCE, secure token refresh, wallet-funded AI, balance/top-up UI, and optional SDK persistence through private app storage or user-approved shared JSON/file vaults. Use when retrofitting AI Pass login, billing, storage, or cross-app workflows into an established web, mobile, desktop, backend, Edge Function, or WordPress architecture.
 ---
 
 # Integrate AI Pass
@@ -14,6 +14,7 @@ Read these references before editing:
 - [oauth-contract.md](references/oauth-contract.md) for exact endpoints, request fields, scopes, redirect policy, refresh rotation, balance, and checkout.
 - [integration-blueprint.md](references/integration-blueprint.md) for architecture, storage, identity linking, funding fallback, error behavior, and deployment order.
 - [examples.md](references/examples.md) for framework-neutral TypeScript and SQL patterns.
+- [sdk-storage.md](references/sdk-storage.md) when the browser SDK app needs private persistence or user-approved app-to-app JSON/file exchange.
 
 Treat `GET https://aipass.one/.well-known/oauth-authorization-server` and runtime model discovery as canonical when live behavior differs from a hardcoded assumption.
 
@@ -30,6 +31,7 @@ Map before changing code:
 - existing free credits, subscriptions, and when they are charged;
 - plan, settings, account, and error UI;
 - database migrations, local stack, tests, deployment, and rollback.
+- current local/browser persistence and whether any data genuinely needs cross-app access.
 
 Search for every direct AI provider call. Do not integrate only the most visible feature and leave secondary generation paths on a different billing route accidentally.
 
@@ -102,6 +104,11 @@ Discover models at runtime. If the product configures a primary and fallback, us
 
 Audit streaming and non-streaming paths separately. Avoid duplicate requests caused by UI regeneration, retries, analysis helpers, or provider adapters layered on top of one another.
 
+For browser-SDK persistence, keep ordinary state in private `AiPass.data`/`AiPass.files`. Use
+`AiPass.shared` only for a deliberate same-user workflow between apps, with the least-powerful
+grant and the SDK's user confirmation. Follow [sdk-storage.md](references/sdk-storage.md); do not
+expose one app's private namespace or invent permanent public file URLs.
+
 ### 8. Add Balance, Top-Up, and Funding Choice
 
 Expose `remainingBudget` from `/api/v1/usage/me/summary` through the host backend. Refresh it at connection load, after each successful AI Pass call, after checkout/window focus, and modestly while visible.
@@ -161,5 +168,6 @@ Do not call the integration complete until:
 - existing app-funded behavior still passes its tests;
 - local and production configuration are documented without secrets;
 - migrations, backend, frontend, and deployment order are verified.
+- any shared-vault grant is user-confirmed, least-privilege, same-user scoped, and revocable.
 
 Report exact files changed, tests run, remaining deployment steps, and any provider-side prerequisite. Never print credentials in the handoff.

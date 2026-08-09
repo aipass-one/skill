@@ -220,6 +220,16 @@ The canonical `/v1/*` resource API accepts either credential type in the Bearer 
 
 See the full skill (`skills/aipass-oauth-app/SKILL.md`) for code examples in JS/Python/Dart, refresh logic, streaming, and the complete common-mistakes list.
 
+### SDK storage and app-to-app workflows
+
+Browser SDK apps also receive free authenticated persistence:
+
+- `AiPass.data` — a private 1 MB JSON document per user/app;
+- `AiPass.files` — private files up to 10 MB each and 50 MB per user/app;
+- `AiPass.shared` — user-owned named vaults containing keyed JSON records and private files, shared with exact apps through user-confirmed `READ`, `CONTRIBUTE`, or `READ_WRITE` grants.
+
+Private namespaces remain private. Cross-app access exists only through an explicit shared-vault grant and is always constrained to the same signed-in user. See [the storage reference](skills/aipass-oauth-app/references/storage.md) for methods, quotas, and a complete handoff pattern.
+
 ---
 
 ## `integrate-aipass` — Retrofit an existing product
