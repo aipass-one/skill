@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "ai-pass",
+  "displayName": "AI Pass",
+  "version": "1.0.0",
+  "description": "Add user-funded multi-model AI to web, mobile, server, ChatGPT, and open-source applications through AI Pass SDK, OAuth, or REST.",
+  "author": {
+    "name": "AI Pass",
+    "url": "https://aipass.one"
+  },
+  "homepage": "https://aipass.one/docs/rest/integration.html",
+  "repository": "https://github.com/aipass-one/skill",
+  "keywords": [
+    "ai",
+    "oauth",
+    "user-funded-ai",
+    "multi-model",
+    "openai-compatible",
+    "byok-alternative"
+  ],
+  "skills": "./skills/"
+}
