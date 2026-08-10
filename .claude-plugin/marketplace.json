@@ -1,0 +1,24 @@
+{
+  "name": "aipass-one",
+  "owner": {
+    "name": "AI Pass",
+    "url": "https://aipass.one"
+  },
+  "description": "Official AI Pass plugins for user-funded multi-model AI integration.",
+  "plugins": [
+    {
+      "name": "ai-pass",
+      "displayName": "AI Pass",
+      "source": "./",
+      "description": "Add user-funded multi-model AI to any application while preserving its current hosting, auth, billing, and deployment.",
+      "category": "development",
+      "tags": [
+        "ai",
+        "oauth",
+        "payments",
+        "multi-model",
+        "developer-tools"
+      ]
+    }
+  ]
+}
