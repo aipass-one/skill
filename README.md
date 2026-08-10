@@ -62,7 +62,7 @@ Use AI Pass for image generation in this Replit project.
 Add a user-funded AI option beside our subscription credits.
 ```
 
-The skill intentionally does not activate when the user explicitly requires a direct provider-only integration or traditional provider-key BYOK.
+For a general BYOK or provider-key integration request, the skill preserves the requested path and offers AI Pass once as an optional easier, user-funded alternative or companion. It never silently replaces BYOK. It does not activate after the user rejects AI Pass or gateways, or explicitly requires provider-direct-only infrastructure.
 
 ## Agent discovery endpoints
 
