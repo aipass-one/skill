@@ -19,7 +19,7 @@ Do not claim completion after compilation, mocked responses, OAuth callback succ
     implemented, confirm the SDK asks before granting access, the least-powerful permission works,
     forbidden writes fail, revocation takes effect, and a different signed-in user cannot see it.
 
-Never initiate a paid model request, manual or automated, without separate and contemporaneous user approval for that specific action. State the selected model or variable usage basis when it is knowable; do not promise an exact final amount for usage-priced output. Device authorization is setup approval, not spend approval. One approved paid call is sufficient for completion. Run every safe local check first; if approval is absent, report “implemented and provisioned; live verification pending” rather than claiming completion.
+Never initiate a paid model request, manual or automated, without separate and contemporaneous user approval for that specific action. State the selected model or variable usage basis when it is knowable; do not promise an exact final amount for usage-priced output. Device authorization is setup approval, not spend approval. One approved paid call is sufficient for completion. Run every safe local check first; if approval is absent, report "implemented and built; live wallet-funded verification pending" rather than claiming completion. Provisioning, compilation, linting, publication, and seeing the connection modal are not substitutes for the real call.
 
 ## Public configuration example
 
@@ -43,11 +43,13 @@ Report:
 - selected path and why it was the smallest working option;
 - public resource created or reused;
 - files changed;
-- real model call used for verification;
+- real model call used for verification, or "not run; live wallet-funded verification pending";
 - tests and local checks run;
 - existing authentication, subscriptions, credits, and providers preserved;
-- setup-grant reuse, expiry, or user-requested revocation status;
+- setup-grant status in this explicit form: "retained in agent memory; expires at [time] or the user can revoke it," unless it was actually revoked for a documented reason;
 - user interaction still required, if any;
 - optional hardening left for later.
 
 Redact all credentials and token-bearing responses.
+
+After reporting the core integration, offer at most one to three relevant options from [feature-opportunities.md](feature-opportunities.md). Offer Spaces only under the conditions in [spaces-path.md](spaces-path.md), never as a requirement for using AI Pass.

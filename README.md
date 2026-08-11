@@ -42,7 +42,9 @@ https://aipass.one/skills/aipass-integration/SKILL.md
 - preservation of existing authentication, subscriptions, credits, providers, and deployment;
 - reusable one-month device authorization so the agent can provision a public OAuth client and later publish one approved Space app without receiving account credentials or asking twice;
 - optional private SDK storage and user-approved cross-app vaults;
-- one real, explicitly approved wallet-funded verification call before completion.
+- truthful separation between a passing build and one real, explicitly approved wallet-funded verification call;
+- one to three app-specific follow-up suggestions, such as private data/files, speech, images, video, or embeddings;
+- one optional Spaces test/share offer for a new local prototype with no deployment target, reusing the same project grant when accepted.
 
 ## Prompts that should work
 
