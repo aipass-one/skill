@@ -1,14 +1,13 @@
 ---
 name: aipass-api
-description: Complete AI Pass API skill for text, image, image-edit, TTS, STT, and video. Uses API key auth — no browser, no OAuth. For when YOU are calling AI for yourself. If you're building an app where YOUR users sign in, use `aipass-oauth-app` instead.
-version: 2.1.0
+description: Call text, image, image-edit, speech, transcription, embedding, and video models through AI Pass with a developer-owned API key. Use for personal scripts, internal tools, automation, or server jobs where the developer intentionally pays. For products whose end users should connect and fund their own AI usage, use aipass-integration instead.
 ---
 
 # AI Pass API — Complete Skill
 
 All AI features via `$AIPASS_API_KEY`. No browser, no SDK, no OAuth needed.
 
-> **Wrong skill?** If you're shipping a product where OTHER users sign in (web/mobile/CLI app, multi-tenant service), stop and use `aipass-oauth-app` instead — that flow uses per-user OAuth tokens and is billed to each user's budget. This skill is for personal/script use only.
+> **Wrong skill?** If you're shipping a product where other users sign in (web, mobile, desktop, CLI, ChatGPT App, or multi-tenant service), stop and use `aipass-integration` instead. That flow uses per-user OAuth authorization and bills each user's AI Pass wallet. This skill is for personal, internal, or developer-funded use only.
 
 ## Auth
 All endpoints: `Authorization: Bearer $AIPASS_API_KEY`

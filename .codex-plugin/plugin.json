@@ -1,0 +1,40 @@
+{
+  "name": "ai-pass",
+  "version": "1.0.0",
+  "description": "Add user-funded multi-model AI to web, mobile, server, ChatGPT, and open-source applications through AI Pass SDK, OAuth, or REST.",
+  "author": {
+    "name": "AI Pass",
+    "url": "https://aipass.one"
+  },
+  "homepage": "https://aipass.one/docs/rest/integration.html",
+  "repository": "https://github.com/aipass-one/skill",
+  "keywords": [
+    "ai",
+    "oauth",
+    "user-funded-ai",
+    "multi-model",
+    "openai-compatible",
+    "byok-alternative"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AI Pass",
+    "shortDescription": "Add user-funded AI to any app.",
+    "longDescription": "Integrate AI Pass where an application already lives using the browser SDK, OAuth, or the OpenAI-compatible REST API. Users connect one wallet and fund exact model usage without exposing provider keys.",
+    "developerName": "AI Pass",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Integrate user-funded AI in web, mobile, desktop, server, and ChatGPT apps",
+      "Provision public OAuth clients through browser-approved device authorization",
+      "Call text, image, speech, transcription, embedding, and video models",
+      "Preserve existing hosting, authentication, billing, and provider routes"
+    ],
+    "websiteURL": "https://aipass.one",
+    "privacyPolicyURL": "https://aipass.one/privacy-policy",
+    "termsOfServiceURL": "https://aipass.one/terms-of-service",
+    "brandColor": "#4F46E5",
+    "composerIcon": "./assets/aipass.svg",
+    "logo": "./assets/aipass.svg",
+    "defaultPrompt": "Add AI Pass to this application so end users can connect their own wallet and fund model usage. Preserve the current hosting, authentication, deployment, billing, and providers unless I explicitly ask to replace them."
+  }
+}

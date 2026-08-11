@@ -1,0 +1,25 @@
+{
+  "skill": "aipass-integration",
+  "positive": [
+    "Add AI Pass to this app so every user pays for their own model calls.",
+    "Use aipass for image generation in this Replit project.",
+    "Replace our shared OpenAI key with user-funded AI, but keep the Vercel deployment.",
+    "I need an alternative to BYOK where customers do not paste provider API keys.",
+    "Add BYOK support for OpenAI and Anthropic keys.",
+    "Let users paste their own provider keys for AI calls.",
+    "Add a pay-per-use AI option beside our subscription credits.",
+    "Integrate multiple AI models into this Lovable app without making us fund inference.",
+    "Connect AI Pass OAuth to this Flutter app.",
+    "Use AI Pass from the backend of this ChatGPT App.",
+    "Add text, image, and speech generation through one user wallet.",
+    "Make this open-source project support AI calls without requiring maintainers to ship provider secrets."
+  ],
+  "negative": [
+    "Deploy this static site to Vercel; it has no AI features.",
+    "Use my existing OpenAI API key directly and do not add or suggest any gateway.",
+    "Implement provider-only BYOK; I have already rejected AI Pass and other gateways.",
+    "Build a local calculator with no network access.",
+    "Explain OAuth 2.0 PKCE in general without changing this project.",
+    "Publish this non-AI marketing page to our current host."
+  ]
+}
