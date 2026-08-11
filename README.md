@@ -14,10 +14,10 @@ You'll be prompted to pick which skill to install. Works with Claude Code, Codex
 
 | Goal | Skill | Auth |
 |---|---|---|
+| Build or retrofit an **app** where users fund their own AI calls | **`aipass-integration`** | One browser-approved project key; SDK or OAuth + REST |
+| Publish this project's HTML app to an AI Pass **Space** | **`aipass-spaces`** | Reuse the same project key; no pasted API key or handle |
 | Call AI for **yourself** with your own API key | **`aipass-api`** | API key (one env var) |
-| Build a new **app** where users sign in to AI Pass and you call AI on their behalf | **`aipass-oauth-app`** | OAuth2 + PKCE per-user |
-| Add AI Pass to an **existing product** with its own users, sessions, or credits | **`integrate-aipass`** | Backend OAuth broker + PKCE |
-| Publish HTML apps to your AI Pass **Space** (aipass.one/spaces/&lt;handle&gt;) from your agent | **`aipass-spaces`** | API key (publishes); SDK + OAuth (inside the published app) |
+| Browse the older direct OAuth cookbook | **`aipass-oauth-app`** | OAuth2 + PKCE per-user |
 
 ```bash
 # Install just the personal-use skill
@@ -26,10 +26,10 @@ npx skills add aipass-one/skill --skill aipass-api
 # Install just the app-builder skill
 npx skills add aipass-one/skill --skill aipass-oauth-app
 
-# Install the production integration skill
-npx skills add aipass-one/skill --skill integrate-aipass
+# Install the canonical app integration skill
+npx skills add aipass-one/skill --skill aipass-integration
 
-# Install just the space-publish skill (great paired with aipass-api)
+# Install just the Space publishing skill
 npx skills add aipass-one/skill --skill aipass-spaces
 
 # Install everything
@@ -232,50 +232,35 @@ Private namespaces remain private. Cross-app access exists only through an expli
 
 ---
 
-## `integrate-aipass` — Retrofit an existing product
+## `aipass-integration` — Build or retrofit an AI app
 
-For established products that already own authentication, sessions, a database, AI features, or free/subscription credits. This skill guides an agent through the production architecture used by integrations such as dr.aft:
+This is the canonical starting point for coding agents. It inspects the existing project, chooses the browser SDK or OAuth + REST, preserves the current host, and lets end users fund their own AI calls without sharing provider keys.
 
-- backend OAuth broker with one-time state and PKCE;
-- encrypted server-side access and refresh tokens;
-- verified identity linking and local session minting;
-- concurrency-safe refresh-token rotation;
-- OpenAI-compatible model routing through each user's AI Pass balance;
-- live balance, checkout, and funding-source UI;
-- safe fallback to product credits without double billing;
-- security, regression, local, and deployment tests.
+Setup uses one browser-approved `asg_` project key. The key lasts up to one month, stays in agent memory, and is reused for:
 
-Use `aipass-oauth-app` for a broad SDK/API cookbook or a new client-only app. Use `integrate-aipass` when AI Pass must fit safely into an architecture that already exists.
+- public OAuth client provisioning;
+- SDK or backend integration corrections and retries;
+- read-only integration guidance;
+- one approved Space app slug if the user asks to publish later.
 
-The full public developer guide is also available at [aipass.one/docs/rest/integration.html](https://aipass.one/docs/rest/integration.html).
+It cannot spend wallet funds, access payments, read secrets, or act as the user's account session. The browser page displays exact callbacks, project permissions, and Space app target before approval. Start with [`skills/aipass-integration/SKILL.md`](skills/aipass-integration/SKILL.md). `integrate-aipass` remains in the repository only as a legacy architecture reference.
 
 ---
 
 ## `aipass-spaces` — Publish HTML apps to your Space
 
-Every AI Pass user can claim a handle at [aipass.one/spaces](https://aipass.one/spaces) and gets a personal app workspace at `aipass.one/spaces/<handle>`. With this skill, an agent (Claude Code, Cursor, etc.) can build an HTML app and publish it to your Space using only your API key — no OAuth setup on your side, no hosting to configure.
-
-### Setup
-
-1. Claim a handle at [aipass.one/spaces](https://aipass.one/spaces) — gives you `aipass.one/spaces/<your-handle>`.
-2. Get your API key: [aipass.one/panel/developer.html](https://aipass.one/panel/developer.html) → API Keys.
-3. `export AIPASS_API_KEY=...`
+Every AI Pass user can claim a handle at [aipass.one/spaces](https://aipass.one/spaces) and gets a personal app workspace at `aipass.one/spaces/<handle>`. The agent discovers the signed-in user's Space through the approved project flow; it must not ask for a handle or generic API key.
 
 ### Flow
 
-```bash
-# Discover your space + the OAuth client id (one per handle, shared by every app you publish)
-curl -s https://aipass.one/api/v1/spaces/me -H "Authorization: Bearer $AIPASS_API_KEY"
-
-# Publish an HTML file — leave the literal "PLACEHOLDER_CLIENT_ID" in the HTML; the server replaces it
-curl -X POST https://aipass.one/api/v1/spaces/me/apps \
-  -H "Authorization: Bearer $AIPASS_API_KEY" -H "Content-Type: application/json" \
-  -d '{"name":"My App","shortDescription":"...","htmlContent":"<!DOCTYPE html>...PLACEHOLDER_CLIENT_ID..."}'
-```
+1. Reuse the in-memory project grant when one already covers the same fingerprint and app slug; otherwise open one browser approval.
+2. Call the setup control plane preflight to discover or bind the signed-in user's Space.
+3. Create or update one draft, then publish that exact draft.
+4. Keep the same one-month project key available for corrections; revoke only on user request or when abandoning it.
 
 The published app uses the AI Pass JS SDK inside it (covered by `aipass-oauth-app`) so visitors sign in and AI calls are billed to *their* wallet — not yours. That's how you earn the 50% commission on Spaces.
 
-See the full skill (`skills/aipass-spaces/SKILL.md`) for the HTML boilerplate, field rules, update endpoint, and an end-to-end working example.
+See [`skills/aipass-spaces/SKILL.md`](skills/aipass-spaces/SKILL.md) for the HTML contract and browser-approved control-plane calls.
 
 ---
 

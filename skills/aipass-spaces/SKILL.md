@@ -1,483 +1,155 @@
 ---
 name: aipass-spaces
-description: Publish self-contained HTML apps to a user's AI Pass Space, using the browser SDK for automatic visitor login, wallet-funded AI, private per-app JSON/files, and user-approved shared vaults between apps. Use when asked to publish or build an app on an AI Pass Space.
+description: Build and publish a self-contained hosted app to the signed-in user's AI Pass Space through one reusable browser-approved project authorization. Use when the user asks to publish on AI Pass Spaces or a hosted Space is the fastest deployment path. Discover or later bind the user's handle automatically; never ask them to look it up or paste it into chat.
 ---
 
-# AI Pass Spaces — App Publishing
+# Publish to AI Pass Spaces
 
-A Space is a user's personal app workspace at `https://aipass.one/spaces/<handle>`. Each user has exactly one Space and one OAuth client that is shared by every app inside it. To publish, you write a single self-contained HTML file and POST it. The user's API key is the only credential you need.
+Use this path when a self-contained hosted app reaches a real result faster than deploying or changing the user's existing project. A Space lives at `https://aipass.one/spaces/{handle}`.
 
-> **Companion skills.** This skill handles only the *publishing* API. For AI calls:
-> - The HTML you publish runs in visitors' browsers and uses the AI Pass JavaScript SDK with OAuth — see **`aipass-oauth-app`** for the SDK reference.
-> - If you need to call AI **for the developer** while you're generating the app (e.g. you want to ask an LLM to write a section of the HTML), use **`aipass-api`** with the same `$AIPASS_API_KEY`.
-> - Do not call OpenAI / Anthropic / Google / Fal SDKs directly when an AI Pass key is available. AI Pass IS those providers, billed through one wallet.
+## Security boundary
 
-## Setup
+Publishing uses a browser-approved `asg_` setup grant. Never ask the user to paste a Space handle, API key, OAuth token, browser cookie, password, device code, or setup grant. Never call generic API-key create, rotate, regenerate, or delete endpoints.
 
-The user provides:
+The grant:
 
-- **`AIPASS_API_KEY`** — `sk-aikey-*`. Used by you to publish.
-- **Space handle** — e.g. `@eiliya`. The owner of the space you're publishing into. Must already be claimed at https://aipass.one/spaces.
-- **OAuth client ID** — used by the SDK *inside* the published HTML. Optional input: you can fetch it at runtime via `GET /api/v1/spaces/me`.
+- gives reusable project setup access for up to one month so integration, correction, and publication do not require repeated approval;
+- is bound to the signed-in account, one app slug, and the stable project fingerprint, and binds that account's Space during approval or first later use;
+- can read the owner's Space, create or update one draft, and publish that draft;
+- cannot call models, spend wallet funds, access payments, read account secrets, or act as a normal user credential.
 
-```bash
-export AIPASS_API_KEY="sk-aikey-..."
-```
+Keep the `asg_` value only in process memory. Never print, persist, commit, or include credentials in tool output. Send credentials only to `https://aipass.one` over HTTPS. The raw `deviceCode` may be stored temporarily in a gitignored `.aipass/pending-device.json` only when a turn-based runtime cannot stay alive while the user approves; delete it at the first terminal outcome.
 
-Base URL for everything in this skill: `https://aipass.one`
+## 1. Prepare the exact app before authorization
 
-## Quick flow
-
-1. `GET /api/v1/spaces/me` — learn `handle` + `oauth2ClientId`. Cache for the session.
-2. Write a single HTML file. Use the boilerplate below; leave `PLACEHOLDER_CLIENT_ID` literal — the server substitutes it on publish.
-3. `POST /api/v1/spaces/me/apps` with the HTML.
-4. Show the user the returned URL: `https://aipass.one/spaces/<handle>/<slug>`.
-
----
-
-## API
-
-All endpoints below use `Authorization: Bearer $AIPASS_API_KEY`.
-
-### GET /api/v1/spaces/me
-
-Caller's space info. Call once at the start of a publish session.
-
-```bash
-curl -s https://aipass.one/api/v1/spaces/me \
-  -H "Authorization: Bearer $AIPASS_API_KEY"
-```
-
-Response:
-```json
-{
-  "success": true,
-  "data": {
-    "handle": "eiliya",
-    "displayName": "Eiliya",
-    "oauth2ClientId": "client_xxxxxxxxxxxxxxxx",
-    "url": "/spaces/eiliya"
-  }
-}
-```
-
-Errors:
-- `404` — user hasn't claimed a handle yet. Tell them to visit `https://aipass.one/spaces` and pick one.
-
-### POST /api/v1/spaces/me/apps
-
-Publish a new app.
-
-```bash
-curl -X POST https://aipass.one/api/v1/spaces/me/apps \
-  -H "Authorization: Bearer $AIPASS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @app.json
-```
-
-`app.json` body:
-```json
-{
-  "slug": "color-picker",
-  "name": "AI Color Picker",
-  "shortDescription": "Describe a vibe, get a palette. Save and copy hex codes with one tap.",
-  "iconEmoji": "🎨",
-  "htmlContent": "<!DOCTYPE html>...<!-- full document, includes PLACEHOLDER_CLIENT_ID -->...",
-  "status": "PUBLISHED"
-}
-```
-
-Field rules:
-- `slug` — optional. Lowercase, hyphens only. Generated from `name` if omitted. Must be unique within the space.
-- `name` — required, 1–200 chars.
-- `shortDescription` — required, 1–300 chars. Shown on the space listing and used as `<meta name="description">`.
-- `htmlContent` — required. Must be a complete document (`<html>...</html>`) AND must contain the literal string `PLACEHOLDER_CLIENT_ID` (the server replaces it with the space's OAuth client id).
-- `iconEmoji` — optional, up to 16 chars (one emoji).
-- `iconUrl` — optional.
-- `metaTitle`, `metaDescription` — optional SEO fields. Default to `name` and `shortDescription`.
-- `status` — optional. `PUBLISHED` (default, visible on the space listing), `UNLISTED` (works via direct URL only), `DRAFT`, or `ARCHIVED`.
-
-Response `201`:
-```json
-{
-  "success": true,
-  "data": {
-    "slug": "color-picker",
-    "name": "AI Color Picker",
-    "shortDescription": "...",
-    "iconEmoji": "🎨",
-    "status": "PUBLISHED",
-    "oauth2ClientId": "client_xxxx",
-    "viewCount": 0,
-    "createdAt": "2026-05-19T..."
-  }
-}
-```
-
-Errors:
-- `400 "Claim a space handle..."` — user hasn't claimed one yet. Direct them to `aipass.one/spaces`.
-- `400 "App with slug 'X' already exists..."` — pick a different slug or use PUT to update.
-- `400 "htmlContent must include the literal 'PLACEHOLDER_CLIENT_ID'..."` — see boilerplate below.
-
-### PUT /api/v1/spaces/me/apps/{slug}
-
-Update an existing app. All fields optional; only sent fields are applied.
-
-```bash
-curl -X PUT https://aipass.one/api/v1/spaces/me/apps/color-picker \
-  -H "Authorization: Bearer $AIPASS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"htmlContent":"<!DOCTYPE html>...new version..."}'
-```
-
-Same field rules as POST. If `htmlContent` is sent, it must still contain `PLACEHOLDER_CLIENT_ID`. Status values: `PUBLISHED`, `UNLISTED`, `DRAFT`, `ARCHIVED`.
-
----
-
-## Required HTML boilerplate
-
-Every published app MUST include this scaffolding so AI Pass can mount the auth/balance widget and bill any AI calls to the visitor's wallet:
+Choose a stable lowercase slug using letters, numbers, and hyphens. Build one complete HTML document with inline app CSS and JavaScript. Include the SDK and keep `PLACEHOLDER_CLIENT_ID` exactly as written; AI Pass replaces it during the draft write.
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My App — AI Pass</title>
-  <meta name="description" content="One-line description shown to visitors and in search results.">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My AI app</title>
   <link rel="stylesheet" href="https://aipass.one/aipass-ui.css">
 </head>
 <body>
-  <header style="display:flex;justify-content:space-between;padding:12px 20px">
-    <a href="/">AI Pass</a>
-    <div data-aipass-button></div>      <!-- Balance + login widget -->
-  </header>
-  <main>
-    <!-- Your app UI here -->
-  </main>
+  <div data-aipass-button></div>
+  <button id="generate" type="button">Generate</button>
+  <output id="result"></output>
   <script src="https://aipass.one/aipass-sdk.js"></script>
   <script>
     AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
-    // AiPass.initialize() auto-mounts the auth/balance widget into every
-    // <div data-aipass-button> on the page (SDK ≥ 2026-05-20). If you inject
-    // more buttons dynamically after init, call AiPassUI.reinit().
-
-    // Load the public catalog once on page load. Discovery does not require auth,
-    // so the picker is ready before the visitor commits to anything.
-    const pickPreferred = (models, ids) => {
-      const available = new Set(models.map(model => model.id));
-      return ids.find(id => available.has(id)) || null;
-    };
-
-    let editModel = null;
-    (async () => {
-      const { data } = await AiPass.getModelCatalog({ type: 'image', method: 'image_edit' });
-      editModel = pickPreferred(data, [
-        'nano-banana-2-edit',
-        'gpt-image-2-edit',
-        'nano-banana-pro-edit'
-      ]);
-      // populate your <select>, enable any model-dependent UI
-    })();
-
-    // The SDK pops its own auth modal mid-call if needed (see Rule 9 below).
-    // Request errors still throw from the method call; balance recovery also
-    // emits aipass:insufficient-balance after the SDK opens the account wallet.
-    document.addEventListener('aipass:error', (e) => console.error(e.detail.error));
   </script>
 </body>
 </html>
 ```
 
-**Don't substitute `PLACEHOLDER_CLIENT_ID` yourself.** Leave the literal string — the server replaces it with the space's shared OAuth client id at publish time. (One client per space means a visitor authorizes once and every app in the space works for them.)
+Use `AiPass.streamText`, `generateCompletion`, image/audio/video helpers, `AiPass.data`, `AiPass.files`, and user-approved `AiPass.shared` only as documented by the browser SDK. The publishing grant must never appear in app HTML.
 
-### Two bugs every Spaces app ships with if you skip the helpers above
+Before the first request, reuse `.aipass/config.json`'s public `projectFingerprint`, or generate and persist a random UUID v4. It is a public project identifier, not a credential. Never derive it from a path, user, hostname, or Git remote. If the agent already holds a usable `asg_` project grant whose scopes include Space read/write/publish and whose project fingerprint and approved app slug match, skip device authorization and reuse it.
 
-**Bug 1 — In-app auth gating breaks the post-login UI.** Don't read `AiPass.isAuthenticated()` to swap button labels (e.g. "Sign in & generate"), hide the model picker, or wait on `aipass:login` to enable features. The SDK already pops its own auth modal at the moment of a protected call (`editImage`, `generateCompletion`, etc.) and resumes the call after login — building a parallel auth gate in the app HTML desyncs after login (button never re-renders → visitor has to refresh). Trust the SDK; treat your app as if every visitor were already signed in, and let the SDK insert the gate where it actually matters.
+## 2. Start device authorization
 
-**Bug 2 - Private route aliases return `400 Invalid model name`.** Discovery exposes stable public IDs such as `nano-banana-2-edit`; provider-qualified upstream routes never belong in app code. Use `AiPass.getModelCatalog({ type: 'image', method: 'image_edit' })` and select from `data[].id`.
+No authentication is required:
 
-### Before you write a single line of HTML — read the SDK
+```http
+POST /api/v1/agent-auth/device
+Content-Type: application/json
 
-The JS SDK is the contract for everything you build. Before you touch the boilerplate, **fetch and skim it**:
-
-```bash
-curl -sS https://aipass.one/aipass-sdk.js -o /tmp/aipass-sdk.js
-# Then grep for the methods you'll call:
-grep -n -E "async (generateCompletion|generateImage|editImage|generateSpeech|transcribeAudio|getModels|getModelCatalog)" /tmp/aipass-sdk.js
-grep -n -E "AiPass\.(data|files|shared)|_createSharedNamespace" /tmp/aipass-sdk.js
-grep -n "_ensureAuthenticated" /tmp/aipass-sdk.js  # see exactly which calls gate auth
-```
-
-What you'll find that matters:
-
-- **Auth-gated methods auto-prompt the modal.** Every generation method (`editImage`, `generateImage`, `generateCompletion`, `generateSpeech`, `transcribeAudio`, `generateImageVariations`, `generateVideo`) starts with `await _ensureAuthenticated()`. If the visitor isn't signed in, the SDK opens its dismissible auth-gate modal, *awaits* the OAuth round-trip, then continues the original call. Your `await AiPass.editImage(...)` resolves with the actual result; no re-click required. Dismissed modals throw `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow silently in your `catch`.
-- **Insufficient balance auto-prompts the wallet.** HTTP 402 and standard insufficient-balance responses open the SDK account/balance window automatically. The thrown error has `code === 'INSUFFICIENT_BALANCE'` and `insufficientBalanceHandled === true` (plus `budgetExceededHandled` for compatibility). Preserve the visitor's work, show a retry action, and use `AiPass.openWallet()` only for an explicit “Open wallet” recovery button after dismissal.
-- **`getModels()`, `getModelCatalog()`, and `getModel()` are public.** No auth, no balance hit. `getModels()` returns stable ID strings; `getModelCatalog()` returns the metadata envelope for filtered pickers.
-- **The `<div data-aipass-button>` widget** is the canonical login affordance. The SDK mounts the sign-in button + balance + dropdown menu into it and keeps it in sync with auth state. Put one in your header and you don't need any other login UI — no in-app "Sign in" button, no syncAuth poll.
-
-Then list the available models against your app's needs:
-
-```bash
-# Use any AI Pass API key — same catalog is served back.
-curl -sS https://aipass.one/v1/models -H "Authorization: Bearer $AIPASS_API_KEY" \
-  | jq -r '.data[].id' | sort
-```
-
-Pick the trend/use-case-appropriate default for your picker; mark it as the default in the UI (e.g. a "(native to trend)" badge). Always include 2-3 alternatives so the visitor can compare quality.
-
-### Calling AI from inside a published app
-
-In the browser, **do NOT use `$AIPASS_API_KEY`** — that key is the developer's, not the visitor's. Use the AI Pass JavaScript SDK, which transparently bills the *visitor's* wallet via OAuth:
-
-```javascript
-// Use the helpers from the boilerplate section above. getModels() is public,
-// so chatModel is ready before the visitor signs in.
-let chatModel = null;
-(async () => {
-  const ids = await AiPass.getModels();
-  chatModel = ids.find(id => id === 'gpt-5-mini')
-           || ids.find(id => id.startsWith('gpt-'))
-           || ids.find(id => id.startsWith('claude-'));
-})();
-
-// In your button handler — no auth check, no login prompt, no re-render dance.
-// If the visitor isn't signed in, the SDK shows its auth modal first, awaits
-// the OAuth round-trip, then completes the call. Your await resolves with
-// the real result.
-//
-// For ANY visible chat output, use streamText() — tokens render as they arrive.
-// Massive perceived-latency win vs waiting 5-30s for a full response.
-async function ask(prompt, outEl) {
-  if (!chatModel) return;
-  try {
-    return await AiPass.streamText(
-      { model: chatModel, messages: [{ role: 'user', content: prompt }] },
-      // DO NOT pass maxTokens — reasoning models eat the cap on reasoning and
-      // return content:null. Omit it and the model uses its native max.
-      (full /*, delta */) => { outEl.textContent = full; }
-    );
-  } catch (e) {
-    if (e && e.code === 'AUTH_REQUIRED') return;  // visitor dismissed the auth modal
-    if (e?.insufficientBalanceHandled || e?.budgetExceededHandled) {
-      outEl.textContent = 'Add AI Pass credit, then try again.';
-      return;
-    }
-    throw e;
-  }
+{
+  "agentName": "Actual executing agent name",
+  "projectName": "My AI app",
+  "projectFingerprint": "4f23c8c2-75ee-4c7f-8762-cdb8225d7a31",
+  "setupVersion": 5,
+  "requestedScopes": [
+    "setup:read",
+    "space:read",
+    "space-apps:write",
+    "space-apps:publish"
+  ],
+  "proposedSpaceAppSlug": "my-ai-app"
 }
-
-// Use generateCompletion ONLY when you need the full response object before
-// doing anything (parsing JSON, branching on usage stats, etc.):
-//   const r = await AiPass.generateCompletion({ model, messages });
-//   const parsed = JSON.parse(r.choices[0].message.content);
 ```
 
-The SDK ships `generateCompletion`, `generateImage`, `editImage`, `generateSpeech`, `transcribeAudio`, `generateEmbeddings`, and `generateVideo`, plus the `AiPass.data`, `AiPass.files`, and `AiPass.shared` storage namespaces. Protected calls authenticate at the API surface — see the "Before you write a single line of HTML — read the SDK" section above. Full reference and recipe library: load `aipass-oauth-app` and read its Path A section.
+Use the real executing tool name. Do not send `proposedSpaceHandle` and do not ask the user for it. Do not send `proposedContentSha256`; setup version 5 lets the agent fix and republish this one approved app without another authorization. The page shows the exact `@handle` when one exists, app slug, editing permission, and other scopes before approval. If the account has no Space yet, the user can still approve; after they claim a handle, the first preflight binds the Space owned by that same account to the existing grant.
 
-### Per-user data storage (AiPass.data)
+Open `verificationUriComplete` once when the environment has a native browser or open-URL capability. Use `open "$verificationUriComplete"` on a local macOS terminal, `xdg-open "$verificationUriComplete"` on a local Linux desktop, `Start-Process $verificationUriComplete` in local Windows PowerShell, or the host's external-link affordance in Replit, Lovable, or another browser IDE. Do not run a desktop opener from a remote or headless server. When opening is unavailable, show the clickable URL.
 
-Every published app gets **one JSON document per signed-in visitor** — server-side storage with identity, no backend needed. Use it for anything the app should remember across visits: settings, history, favorites, scores, journal entries. Whole-document semantics: load once, mutate in memory, write the whole object back.
+Opening is only a convenience handoff. Never fetch the page with `curl`, inspect it with browser automation, sign in, click Continue, approve, or otherwise interact with it on the user's behalf. Attempt the automatic open once, not after every pending poll.
 
-```javascript
-// Load — returns {} on the visitor's first ever use of this app.
-let store = await AiPass.data.get();
+Poll no faster than the returned `interval`:
 
-store.history = store.history || [];
-store.history.push({ prompt, at: Date.now() });
+```http
+POST /api/v1/agent-auth/token
+Content-Type: application/json
 
-// Whole-document write (last-write-wins).
-await AiPass.data.set(store);
+{"deviceCode":"in-memory device code"}
 ```
 
-The contract:
+Continue on `authorization_pending`, slow down on `slow_down`, and stop on denial or expiry. On success, keep the returned `asg_` access token in memory only.
 
-- **Auth-gates at call time, like generation methods.** `get()`/`set()` run `_ensureAuthenticated()` — a signed-out visitor gets the SDK auth modal and your `await` resumes after login. Works exactly right with `requireLogin: false`; do NOT wrap data calls in `isAuthenticated()` checks (rule 9 applies). Dismissed modal throws `AuthRequiredError` (`error.code === 'AUTH_REQUIRED'`) — swallow it in your `catch`.
-- **Scope is automatic:** (signed-in visitor, this app), derived from the `/spaces/{handle}/{slug}` page URL. One app cannot read another space's data.
-- **Limits:** 1 MB per document, ~30 writes/minute per visitor. **Free** — data calls never spend the visitor's wallet. Save on explicit user action or debounce; never per keystroke.
-- **Namespaced API only.** `AiPass.data.get()` / `AiPass.data.set(obj)`. There is no `AiPass.getData()`, `AiPass.saveData()`, or `AiPass.data(...)` — those are hallucinations and will throw.
-- **Optional optimistic concurrency:** `AiPass.data.set(obj, { ifRevision: AiPass.data.revision })` rejects with a revision-conflict error if another tab wrote in between; reload with `get()` and retry. Omit `ifRevision` for last-write-wins (the right default for almost every app).
+If the runtime ends its turn after handing control to the browser, add `.aipass/pending-device.json` to the project's ignore file and store only the raw `deviceCode`, `userCode`, and absolute expiry there. On the next turn, exchange that same device code once. Never start a second request while it remains unexpired. Delete the file after approval, denial, or expiry. Never write the `asg_` grant to disk.
 
-### Private per-user files (`AiPass.files`)
+## 3. Mandatory preflight
 
-Keep binary data out of the JSON document:
+Before every draft write, call:
 
-```javascript
-const saved = await AiPass.files.upload(file, { name: 'reference-photo.jpg' });
-const files = await AiPass.files.list();
-const blob = await AiPass.files.download(saved.id);
-const url = await AiPass.files.getUrl(saved.id); // revoke with URL.revokeObjectURL(url)
-await AiPass.files.remove(saved.id);
+```http
+GET /api/v1/agent-control/space/preflight
+Authorization: Bearer asg_REDACTED
 ```
 
-Files are scoped automatically to `(signed-in visitor, this Space app)`, are private authenticated
-downloads, and never receive public URLs. Limits are 10 MB/file, 50 MB total, and 100 files per
-visitor/app. Executable web formats are rejected. Storage is free.
+The returned `handle` is the exact signed-in Space bound during approval or this first preflight. Save it as public metadata in `.aipass/config.json`; do not ask the user to copy it. Inspect `apps` and update the approved matching slug instead of creating a duplicate. The grant may revise content for this slug, but it cannot switch slugs or take over an app that is not already managed by the same project fingerprint.
 
-### Shared databases and files across apps (`AiPass.shared`)
+Machine-readable failures:
 
-Use shared vaults only for intentional app-to-app workflows. A vault belongs to the signed-in user
-and contains keyed, revisioned JSON records plus private files. The creator app grants an exact app
-reference; the SDK shows a contextual AI Pass confirmation before the grant is written.
+- `MISSING_CREDENTIAL`: no bearer value was sent;
+- `INVALID_CREDENTIAL`: malformed, unknown, or wrong credential family;
+- `CREDENTIAL_REVOKED`: the owner ended the grant;
+- `CREDENTIAL_EXPIRED`: the grant timed out;
+- `SPACE_NOT_CLAIMED`: the authenticated owner has no Space; open `/spaces` for them to claim one, then retry with the same grant;
+- `SPACE_HANDLE_MISMATCH`: the approved handle is not the owner's current handle.
 
-```javascript
-const project = await AiPass.shared.create('Campaign autumn');
-await AiPass.shared.records.set(project.id, 'request:hero', { prompt });
+Keep the same approved grant through SDK/OAuth integration, draft creation, correction, retry, and publication for this exact project app for up to one month. Do not revoke after the first successful call or start a replacement merely because another already-approved operation remains. For an expired, revoked, missing, or invalid grant, start one fresh device authorization for the same target and ask for browser approval. Never rotate or create a generic API key. Do not retry automatically after denial. `404` is not an authentication signal.
 
-await AiPass.shared.grant(project.id, {
-  appRef: 'space:designer/image-maker',
-  access: 'CONTRIBUTE'
-});
+## 4. Create or update the draft first
 
-// The granted app, signed in as the same user:
-const projects = await AiPass.shared.list();
-const request = await AiPass.shared.records.get(project.id, 'request:hero');
-const image = await AiPass.shared.files.upload(project.id, generatedBlob, { name: 'hero.png' });
-await AiPass.shared.records.set(project.id, 'result:hero', { fileId: image.id });
+```http
+PUT /api/v1/agent-control/space/apps/{approved-slug}
+Authorization: Bearer asg_REDACTED
+Content-Type: application/json
+
+{
+  "name": "My AI app",
+  "shortDescription": "A clear description of what the app does.",
+  "htmlContent": "<!doctype html>...PLACEHOLDER_CLIENT_ID...</html>",
+  "idempotencyKey": "space-draft:v1"
+}
 ```
 
-- `READ`: list/read records and list/download files.
-- `CONTRIBUTE`: read and add new record keys/files, without overwrite or delete.
-- `READ_WRITE`: read, add, replace, and delete records/files.
-- App references: `oauth:{clientId}`, `app:{catalog-slug}`, or `space:{handle}/{slug}`.
-- Only the creator app can grant/revoke access or delete the vault. Every request remains constrained
-  to the same signed-in user.
-- Limits: 20 vaults/user, 500 records and 1 MB JSON/vault, 20 grants/vault, 10 MB/file, 50 MB files,
-  and 100 files/vault.
+The server verifies the approved Space, app slug, project fingerprint, and session scope, then writes `DRAFT`; it never publishes in the same call. A fresh project may create the approved slug. A returning project may update only an agent-managed app previously created with the same stable project fingerprint. It cannot take over another app.
 
-Management methods are `list`, `create`, `get`, `remove`, `resolveApp`, `listGrants`, `grant`, and
-`revoke`. Record methods are `records.list/get/set/remove`; file methods are
-`files.list/upload/download/getUrl/remove`. Prefer private `AiPass.data`/`AiPass.files` unless
-cross-app access is a real product feature.
+If the response is lost, run preflight again before retrying. Reuse the same slug, fingerprint, content, and idempotency key. Never invent a second slug to bypass an ambiguous response.
 
----
+## 5. Publish that exact draft
 
-## Rules — don't break these or the published app won't work
-
-1. **Keep `PLACEHOLDER_CLIENT_ID` literal** in the HTML you POST. Server substitutes it.
-2. **Use `requireLogin: false`** in `AiPass.initialize`. The flag controls whether a forced login modal pops on page load — `true` tanks engagement because visitors get gated before they've seen the app. With `false`, the SDK still gates protected calls (`editImage`, `generateCompletion`, etc.) by showing its auth modal *at the moment of the call*, then awaiting the OAuth round-trip and continuing the call automatically. You do not need to call `AiPass.login()` yourself.
-3. **Keep `<div data-aipass-button></div>`** somewhere visible (header is conventional) AND **render it in the actual DOM**. The SDK calls `document.querySelectorAll('[data-aipass-button]')` after init and mounts the widget into matched elements. For single-file HTML this is automatic. **For React/Vue/Svelte/Vite-bundled apps** the slot has to be in your JSX/template — putting the string `data-aipass-button` in a comment, in unrendered code, or only inside compiled JS does NOT count. A common failure mode: the agent writes a React PWA, the literal string `data-aipass-button` appears in the bundle (from the skill's boilerplate copied as a comment), but no element is actually rendered, so the widget never mounts and visitors see no login UI. Verify with `document.querySelectorAll('[data-aipass-button]').length > 0` in the live DOM. No mounted element = no login UI.
-4. **Don't write a custom login flow.** The SDK provides the overlay; rolling your own breaks billing.
-5. **Don't include `$AIPASS_API_KEY` in the HTML.** That's *your* (the agent's) auth for publishing, not the app's runtime auth. Apps authenticate visitors via the SDK + OAuth.
-6. **Single-file output preferred.** No external JS/CSS files of your own — inline everything. CDN scripts (Tailwind, Chart.js, etc.) are fine. If you need a bundler (Vite/Webpack) for a complex app, use `vite-plugin-singlefile` to output one self-contained HTML, and double-check rule 3 — the slot must end up in the rendered output.
-7. **Sanitize model output before `innerHTML`.** Use DOMPurify when rendering markdown or any AI-generated HTML.
-8. **Discover models at runtime.** `AiPass.getModels()` returns stable public ID strings. Use `AiPass.getModelCatalog({ type, capability, method })` when selecting by behavior, and never copy provider-qualified route aliases into app code.
-9. **Don't gate UI on auth state.** No `AiPass.isAuthenticated()` checks to swap button labels, hide the model picker, or enable features. Don't listen for `aipass:login` / `aipass:logout` to re-render. The SDK already gates protected calls at the API surface — when the visitor clicks "Generate" while signed out, the SDK pops its auth modal, waits for OAuth, then completes the call. In-app gating layered on top of this desyncs after login (buttons stay in their signed-out state until the visitor refreshes). The `<div data-aipass-button>` widget is the only login affordance the app needs.
-10. **Do NOT pass `maxTokens` to `generateCompletion` / `streamText`** unless you genuinely need to truncate output. Reasoning models (`gpt-5-mini`, `gpt-5`, o-series) count internal reasoning against the cap and silently return `content: null` when it's too low. Omit the field and the model uses its native max (128K out for gpt-5-mini). The SDK no longer ships a default; passing one yourself reintroduces the bug.
-11. **Stream visible chat output via `AiPass.streamText(opts, onToken)`.** It's a one-line wrapper around `generateCompletion({ stream: true })` that renders tokens as they arrive — perceived latency drops from 5–30s of "loading…" to ~50ms per token. Reserve `generateCompletion` for programmatic use only (parsing JSON, branching on usage stats). Example: `await AiPass.streamText({ model, messages }, (full) => { el.textContent = full; });`
-12. **For `gpt-image-2-edit`, pass `quality: 'low'`** unless you genuinely need 'high'. It cuts generation time from ~3–5min to ~30–90s. For grainy / retro / VHS / polaroid trends it's also visually on-brand (the aesthetic IS low resolution). The SDK already client-side-shrinks oversized photos before upload.
-13. **Keep persistence private by default.** Use `AiPass.data` and `AiPass.files` for ordinary app state. Use `AiPass.shared` only for explicit cross-app collaboration, choose the least-powerful grant, and let the SDK display its confirmation dialog. Never store credentials or secrets.
-14. **Let the SDK own insufficient-balance recovery.** Do not build a second payment modal or preflight `getUserBalance()` before a request. The SDK opens the account wallet on 402. Keep the user's input, show a clear retry state near the failed action, and wire any later “Open wallet” button to `AiPass.openWallet()`.
-
----
-
-## End-to-end example
-
-```bash
-# 1. Get space info
-SPACE=$(curl -s https://aipass.one/api/v1/spaces/me \
-  -H "Authorization: Bearer $AIPASS_API_KEY")
-HANDLE=$(echo "$SPACE" | jq -r '.data.handle')
-[ -z "$HANDLE" ] && { echo "Claim a handle first at https://aipass.one/spaces"; exit 1; }
-
-# 2. Write the HTML (substitute PLACEHOLDER_CLIENT_ID NOWHERE — server does it)
-cat > /tmp/app.html <<'HTML'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Color Palette Generator — AI Pass</title>
-  <meta name="description" content="Describe a mood. Get a 5-color palette with hex codes.">
-  <link rel="stylesheet" href="https://aipass.one/aipass-ui.css">
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <header class="flex items-center justify-between px-5 py-3 border-b border-white/10">
-    <a href="/" class="font-bold">AI Pass</a>
-    <div data-aipass-button></div>
-  </header>
-  <main class="max-w-2xl mx-auto px-4 py-10">
-    <h1 class="text-3xl font-extrabold mb-6">Color Palette Generator</h1>
-    <input id="mood" class="w-full p-3 rounded bg-white/10 mb-3" placeholder="e.g. 'misty mountain dawn'">
-    <button id="go" class="px-5 py-2.5 bg-indigo-600 rounded-full font-semibold">Generate</button>
-    <div id="out" class="mt-8 grid grid-cols-5 gap-2"></div>
-  </main>
-  <script src="https://aipass.one/aipass-sdk.js"></script>
-  <script>
-    AiPass.initialize({ clientId: 'PLACEHOLDER_CLIENT_ID', requireLogin: false });
-    // initialize() auto-mounts the auth widget into <div data-aipass-button>
-
-    // getModels() is public. Load the stable ID array eagerly so the model is ready
-    // before the visitor commits. The SDK will pop its auth modal at click time.
-    let chatModel = null;
-    (async () => {
-      const ids = await AiPass.getModels();
-      chatModel = ids.find(id => id === 'gpt-5-mini') || ids.find(id => id.startsWith('gpt-'));
-    })();
-
-    document.getElementById('go').onclick = async () => {
-      const mood = document.getElementById('mood').value.trim();
-      if (!mood || !chatModel) return;
-      const out = document.getElementById('out');
-      out.innerHTML = 'Thinking…';
-      try {
-        const r = await AiPass.generateCompletion({
-          model: chatModel,
-          messages: [
-            { role: 'system', content: 'Return exactly 5 hex color codes for the requested mood, separated by spaces. No prose.' },
-            { role: 'user', content: mood },
-          ],
-        });
-        const hexes = r.choices[0].message.content.match(/#[0-9a-fA-F]{6}/g) || [];
-        out.innerHTML = hexes.slice(0, 5).map(h =>
-          `<div class="aspect-square rounded-lg flex items-end p-1 text-[10px] font-mono" style="background:${h}">${h}</div>`
-        ).join('');
-      } catch (e) {
-        if (e && e.code === 'AUTH_REQUIRED') { out.innerHTML = ''; return; }
-        if (e?.insufficientBalanceHandled || e?.budgetExceededHandled) {
-          out.textContent = 'Add AI Pass credit, then generate again.';
-          return;
-        }
-        out.innerHTML = `<div class="col-span-5 text-rose-300 text-sm">${e.message || 'Something went wrong'}</div>`;
-      }
-    };
-  </script>
-</body>
-</html>
-HTML
-
-# 3. Publish
-jq -n \
-  --arg name "Color Palette Generator" \
-  --arg desc "Describe a mood. Get a 5-color palette with hex codes." \
-  --rawfile html /tmp/app.html \
-  '{name:$name, shortDescription:$desc, iconEmoji:"🎨", htmlContent:$html}' \
-  | curl -X POST https://aipass.one/api/v1/spaces/me/apps \
-      -H "Authorization: Bearer $AIPASS_API_KEY" \
-      -H "Content-Type: application/json" \
-      -d @-
-
-# 4. Visit https://aipass.one/spaces/$HANDLE/color-palette-generator
+```http
+POST /api/v1/agent-control/space/apps/{approved-slug}/publish
+Authorization: Bearer asg_REDACTED
 ```
 
----
+Only the draft bound to this grant can be promoted. Confirm the response status is `PUBLISHED`, then open the preflight handle at `/spaces/{handle}/{slug}`. The public Spaces index lists only Spaces with published apps; the owner can still see empty Spaces, drafts, and failed builder records on their own Space page.
 
-## When NOT to use this skill
+## 6. Verify and keep the project grant available
 
-- Calling AI from a server, script, or CLI for the developer's own use → use **`aipass-api`** instead.
-- Building a standalone product where users sign in to AI Pass on YOUR domain → use **`aipass-oauth-app`** instead. Spaces apps live on `aipass.one`, not your domain.
-- Publishing without a handle → not supported; the user must claim one at `aipass.one/spaces` first.
-- Catalog apps (curated, in the older `/apps` directory) — different endpoint, different review flow.
+Open the real app, exercise its normal AI Pass connection, and make a wallet-funded AI call only with contemporaneous user approval. Confirm one user action makes one model request and renders the real result. Exercise loading, cancellation, one error state, and storage isolation when used.
 
----
+Do not revoke merely because publication completed; the same agent conversation may need to correct or republish the app. Revoke only when the user asks to disconnect, the project identity changes, or the agent must abandon a credential it can no longer protect:
 
-## Help
+```http
+DELETE /api/v1/agent-control/session
+Authorization: Bearer asg_REDACTED
+```
 
-- Dashboard / API keys: https://aipass.one/panel/developer.html
-- Spaces: https://aipass.one/spaces
-- Discord: https://discord.gg/hENftFRMMD
-- Full docs: https://aipass.one/docs
-
-Developers earn **50% commission** on every AI call visitors make through apps you publish to a space.
+When revocation is requested, confirm a later control-plane request returns `CREDENTIAL_REVOKED`. Otherwise report that the in-memory project grant remains available until its one-month expiry or user revocation. Report the public Space URL, slug, and verification performed. Never include credential-bearing responses in the report.
