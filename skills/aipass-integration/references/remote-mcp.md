@@ -1,6 +1,6 @@
 # Remote MCP setup tools
 
-Use AI Pass remote MCP only after the user approves the device flow in [setup-control-plane.md](setup-control-plane.md). The endpoint is `POST https://aipass.one/mcp` and accepts only the short-lived `asg_` setup grant. It does not accept an AI Pass session, runtime OAuth token, generic API key, client secret, provider key, or wallet credential.
+Use AI Pass remote MCP only after the user approves the device flow in [setup-control-plane.md](setup-control-plane.md). The endpoint is `POST https://aipass.one/mcp` and accepts only the one-month `asg_` project setup grant. It does not accept an AI Pass session, runtime OAuth token, generic API key, client secret, provider key, or wallet credential.
 
 ## Choose MCP only when the grant stays ephemeral
 
@@ -36,6 +36,6 @@ There are no tools for model calls, wallet access, payments, billing, generic AP
 
 For `ensure_public_oauth_client`, use the exact project name the user approved, the stable versioned idempotency key from `.aipass/config.json`, and runtime scope `api:access`. Add `profile:read` only when AI Pass is intentionally the host login. Read context before ensuring anything. Callback destinations are not tool arguments: the server reads the exact `proposedRedirectUris` shown during device approval and returns those immutable values in `redirectUris`.
 
-## Cleanup
+## Optional disconnect
 
-Make `revoke_setup_session` the final MCP call. A successful revocation response is the completion signal; do not send another MCP, REST control-plane, or A2A request with that grant. Revoke before the separately approved wallet-funded verification call. If MCP cleanup cannot be called but the grant is still usable, use `DELETE /api/v1/agent-control/session` once and discard the grant from memory.
+Do not call `revoke_setup_session` after the first provisioning step or merely because the user asks for a follow-up Space deployment. Keep using the same in-memory grant for the approved project. Call it when the user asks to disconnect, the project identity changes, or the agent must abandon a value it can no longer protect. A successful response ends the grant immediately; do not send another authenticated request with it. If MCP revocation cannot be called, use `DELETE /api/v1/agent-control/session` once and discard the grant from memory.

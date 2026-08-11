@@ -14,7 +14,7 @@ Do not claim completion after compilation, mocked responses, OAuth callback succ
 8. Exercise cancellation or one understandable error path.
 9. Confirm existing login and billing paths still behave as before.
 10. Confirm `.aipass/config.json` contains public metadata only.
-11. Confirm every setup grant was revoked immediately after its final control-plane call.
+11. Confirm the same approved project grant was reused for every setup operation in the current agent conversation, without unnecessary reauthorization.
 12. When persistence is implemented, confirm private app data is isolated. When shared vaults are
     implemented, confirm the SDK asks before granting access, the least-powerful permission works,
     forbidden writes fail, revocation takes effect, and a different signed-in user cannot see it.
@@ -46,7 +46,7 @@ Report:
 - real model call used for verification;
 - tests and local checks run;
 - existing authentication, subscriptions, credits, and providers preserved;
-- setup-grant cleanup result;
+- setup-grant reuse, expiry, or user-requested revocation status;
 - user interaction still required, if any;
 - optional hardening left for later.
 

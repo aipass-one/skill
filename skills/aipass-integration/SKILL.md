@@ -16,9 +16,10 @@ When the request is to add BYOK or provider-key entry and the user has not rejec
 ## Security boundary
 
 - Never ask the user to paste, reveal, or hand the agent a password, browser cookie, AI Pass session token, runtime OAuth access or refresh token, client secret, provider API key, or wallet credential. A secured backend OAuth callback may receive runtime tokens directly from AI Pass and store them under the controls in [backend-oauth.md](references/backend-oauth.md); those values must never pass through agent output or user chat.
-- Use only the short-lived `asg_` setup grant obtained through the user-approved device flow. It is not a runtime app credential and cannot authenticate normal account APIs.
-- Request only the scopes needed for the selected path. Use deterministic control-plane endpoints for mutations; Nova A2A is read-only.
-- Never print, commit, persist, or send the raw `deviceCode` or `asg_` setup grant to application code. Show the user-facing `verificationUriComplete` so the user can approve, but keep the underlying credentials in process memory only. Persist only public values in `.aipass/config.json`.
+- Use only the reusable, one-month `asg_` project setup grant obtained through the user-approved device flow. It is not a runtime app credential and cannot authenticate normal account APIs.
+- Open the returned user-facing `verificationUriComplete` once when the environment has a browser or open-URL capability. This is a convenience handoff only. Never fetch, inspect, approve, or interact with the authorization page on the user's behalf, and never repeatedly reopen it.
+- Request the standard project setup scope set once so the same reviewed grant can provision the app client and, if requested later, manage this project's one Space app. Use deterministic control-plane endpoints for mutations; Nova A2A is read-only.
+- Never print, commit, or send the raw `deviceCode` or `asg_` setup grant to application code. Show the user-facing `verificationUriComplete` so the user can approve. Keep the `asg_` setup grant in process memory only. The raw `deviceCode` may be stored in `.aipass/pending-device.json` when the runtime cannot hold a process open across the user's approval; gitignore that path before writing it and delete the file as soon as the request reaches a terminal outcome. Persist only public values in `.aipass/config.json`.
 - Preserve existing login, subscriptions, credits, provider routes, and user data unless the user explicitly asks to replace them.
 - If the host's content-security or dependency policy forbids loading the official AI Pass browser SDK from `https://aipass.one`, choose backend OAuth instead of weakening that policy.
 
@@ -48,7 +49,7 @@ Apply [path-decision.md](references/path-decision.md):
 
 1. Prefer the lazy browser SDK whenever the app has a usable browser surface, including localhost and browser apps hosted by Vercel, Replit, or Lovable.
 2. Use OAuth plus the OpenAI-compatible REST API for native mobile/desktop apps, CLIs, ChatGPT App backends, server-only actions, private prompts or data, and runtimes whose policy forbids browser token custody.
-3. Preserve the current deployment. For a new local browser prototype, prove the SDK flow on localhost. Use Spaces only when the user asks for it or needs a hosted self-contained result and has no practical deployment path.
+3. Preserve the current deployment. For a new local browser prototype, prove the SDK flow on localhost. Use Spaces only when the user asks for it or needs a hosted self-contained result and has no practical deployment path. The standard project grant covers both paths, so switching this same project to Spaces later must not trigger another authorization.
 4. Use AI Pass as the host login only when the host has no authentication and genuinely needs durable local identity.
 
 Ask the user only for the one-time optional AI Pass choice on a general BYOK request, an ambiguous product name, ambiguous existing auth or billing intent, a paid request, or a destructive or security-sensitive change.
@@ -57,13 +58,13 @@ Ask the user only for the one-time optional AI Pass choice on a general BYOK req
 
 Follow [setup-control-plane.md](references/setup-control-plane.md). Before the first device request, ensure `.aipass/config.json` contains a public `projectFingerprint`: generate a random UUID v4 once when absent, persist it, and reuse it exactly on every later setup request for this project. Never derive it from a path, Git remote, user identity, or machine identifier.
 
-1. Request the minimum scopes for the chosen path. When requesting `oauth-clients:create`, include one to eight valid, exact `proposedRedirectUris`; never request a callback-less client.
-2. Start the public device flow with `setupVersion` set to `4`, the inferred project name, persisted public project fingerprint, and proposed callbacks.
-3. Ask the user to open the returned `verificationUriComplete` and approve the clearly displayed request, including its sign-in destinations.
-4. Poll at the returned interval until approved, denied, or expired.
+1. Request the standard project scopes: `setup:read`, `oauth-clients:read`, `oauth-clients:create`, `space:read`, `space-apps:write`, `space-apps:publish`, and `nova:query`. Include one to eight valid, exact `proposedRedirectUris` and infer one stable Space app slug from the project name even when Spaces is only a possible later host.
+2. Start the public device flow with `setupVersion` set to `5`, the inferred project name, persisted public project fingerprint, proposed callbacks, and `proposedSpaceAppSlug`. This single approval is the reusable project setup authorization.
+3. When possible, open the returned `verificationUriComplete` once with the environment's native browser or open-URL capability, then ask the user to review and approve the clearly displayed request, including its sign-in destinations. If opening is unavailable or the agent is running headlessly, show the clickable URL instead. Never fetch or approve the page for the user.
+4. Poll at the returned interval until approved, denied, or expired. If the runtime ends execution when it hands control back to the user, do not open a polling loop it cannot finish: store the device code and resume on the next turn, as described in setup-control-plane.md.
 5. Use the returned `asg_` grant only with the remote MCP endpoint, `/api/v1/agent-control/**`, and the read-only A2A endpoint.
 
-Do not ask the user to paste a token. Do not call the human approval endpoint yourself.
+Do not ask the user to paste a token. Do not call the human approval endpoint yourself. Never start a second device request while an earlier one is still unexpired and unexchanged.
 
 ### 4. Provision deterministically
 
@@ -72,7 +73,7 @@ Read the current setup context before creating anything. Reuse a matching owned 
 When remote MCP is available, connect to the authenticated endpoint described in [remote-mcp.md](references/remote-mcp.md) and use its typed tools for context, guidance, public-client provisioning, and cleanup. Otherwise call the equivalent REST control-plane endpoints from [setup-control-plane.md](references/setup-control-plane.md). Both interfaces enforce the same setup grant, scopes, ownership checks, idempotency, audit trail, and no-spend boundary. Never fall back to a normal user token or generic API key.
 
 - SDK, backend OAuth, and login paths: ensure one public, secretless OAuth client bound to the callbacks the user approved, and retain its returned public client ID and callback list. Changing callbacks requires a fresh setup approval; do not silently broaden or replace them.
-- This setup flow provisions app integration clients; it does not publish to Spaces. When Spaces is the selected hosting fallback, stop this flow and follow the standalone Spaces manual, which uses a separate browser-approved, content-bound setup grant. Never request or accept a generic API key for Space publishing.
+- The same grant may publish or revise the one approved Space app slug through the REST control plane. If Spaces is selected, read the standalone Spaces manual but reuse this compatible grant instead of starting another device flow. Never request or accept a generic API key for Space publishing.
 
 If provisioning fails ambiguously, read context again before retrying. Never turn to account-wide, payment, billing, security, or generic API-key endpoints.
 
@@ -80,9 +81,9 @@ If provisioning fails ambiguously, read context again before retrying. Never tur
 
 After provisioning succeeds, update `.aipass/config.json`. Retain the public project fingerprint and use these canonical fields where applicable: `schemaVersion`, `path`, `appName`, `clientId`, and `oauthClientIdempotencyKey`. Space workflows may additionally record a public handle or slug. Never include the device code, setup grant, OAuth tokens, secrets, cookies, or provider keys.
 
-### 6. Revoke setup authorization
+### 6. Keep one reusable project setup key
 
-As soon as the public configuration is saved and no further control-plane or help call is needed, revoke the setup grant. Do this before editing runtime application code and before any wallet-funded verification. If later implementation work proves that another control-plane call is necessary, start a fresh user-approved device flow rather than retaining or recovering the old grant.
+Keep the approved grant in agent/process memory for this project for up to its displayed one-month lifetime. Reuse the same value for OAuth provisioning, corrections, retries, Nova help, and this project's approved Space app. Do not revoke it after the first successful call, after integrating the SDK, or before a later Space publication in the same agent conversation. Do not start a replacement while it remains usable. Never persist it to disk or use it outside the approved project resources.
 
 ### 7. Implement one proof path
 
@@ -90,11 +91,11 @@ Read only the selected implementation reference. Make the smallest reversible ch
 
 When current subscriptions, credits, or providers exist, add AI Pass as an explicit additional option and leave existing behavior intact.
 
-### 8. Verify and report
+### 8. Revoke, verify, and report
 
-Follow [verification.md](references/verification.md). After separate, contemporaneous user approval for that specific paid action and its cost basis when knowable, complete one real wallet-funded model call in the actual user flow. Observe that one user action emits one model request, render its real result, and check authenticated reuse without making another paid call.
+Follow [verification.md](references/verification.md). After separate, contemporaneous user approval for that specific paid action and its cost basis when knowable, complete one real wallet-funded model call in the actual user flow. Observe that one user action emits one model request, render its real result, and check authenticated reuse without making another paid call. Setup authorization still never authorizes model spending.
 
-Prepare the completion report and confirm that the earlier grant revocation succeeded before presenting it. On a terminal setup failure, revoke the grant when it is still available and cleanup is safe. A public OAuth client successfully created before a later implementation failure is not a secret and is not deleted automatically; report it so the user can retain or remove it from the developer console. Do not delay grant cleanup merely because the grant will expire.
+Do not automatically revoke a healthy grant merely because one setup step completed; that recreates repeated authorization on follow-up work. Keep it only in the agent's existing memory, discard it when that execution context is gone, and let the one-month server expiry provide the backstop. Revoke immediately when the user asks to disconnect, the project changes identity, a terminal security failure occurs, or the agent can no longer protect the value. A public OAuth client successfully created before a later implementation failure is not a secret and is not deleted automatically; report it so the user can retain or remove it from the developer console.
 
 Report the chosen path, provisioned public identifiers, files changed, real call used, tests run, preserved auth and billing behavior, cleanup result, and optional hardening left for later. Never print token-bearing responses.
 

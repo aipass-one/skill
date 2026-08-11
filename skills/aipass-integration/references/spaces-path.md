@@ -2,11 +2,13 @@
 
 AI Pass Spaces is an optional hosted-app path for a self-contained HTML result. It is not required to integrate AI Pass, and an existing application should remain on its current host unless the user asks to move it.
 
-Do not reuse the integration setup grant for publishing. Fetch and follow the canonical standalone manual:
+Read the canonical standalone manual for the Space app format and publication calls:
 
 https://aipass.one/skills/aipass-spaces/SKILL.md
 
-That manual uses browser-approved device authorization with a short-lived grant bound to the exact user, Space, slug, project, and HTML hash. Never ask for a generic API key, password, browser cookie, session token, device code, or setup grant. Never call the human approval endpoint on the user's behalf.
+The standard integration grant already contains the displayed Space scopes and one project app slug. If it is still usable, reuse it with the standalone manual's REST calls; never start a second device request. If no grant exists yet, the manual creates the same one-month project-bound authorization. Never ask for a generic API key, password, browser cookie, session token, device code, or setup grant. Never call the human approval endpoint on the user's behalf.
+
+Do not ask the user to look up or paste their Space handle. The signed-in approval page resolves an existing Space automatically. A new user may approve first and claim a Space later; the first preflight then binds the Space owned by that same account without another authorization.
 
 For a new browser prototype, the SDK on localhost is usually the fastest proof. Choose Spaces only when the user requests it or wants a hosted result and the project has no practical deployment path.
 

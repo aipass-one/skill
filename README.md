@@ -31,16 +31,16 @@ https://aipass.one/skills/aipass-integration/SKILL.md
 
 | Goal | Skill | Credential model |
 |---|---|---|
-| Add AI Pass to an app whose users should fund their own calls | [`aipass-integration`](skills/aipass-integration/SKILL.md) | User OAuth + SDK or REST |
+| Add AI Pass to an app whose users should fund their own calls | [`aipass-integration`](skills/aipass-integration/SKILL.md) | One browser-approved project key; user OAuth + SDK or REST |
 | Call AI for a personal script, agent, internal tool, or developer-funded server job | [`aipass-api`](skills/aipass-api/SKILL.md) | Developer API key |
-| Publish a self-contained HTML app to an AI Pass Space | [`aipass-spaces`](skills/aipass-spaces/SKILL.md) | Browser-approved short-lived device grant |
+| Publish this project's self-contained HTML app to an AI Pass Space | [`aipass-spaces`](skills/aipass-spaces/SKILL.md) | Reuse the same browser-approved project key |
 
 `aipass-integration` is the flagship skill. It chooses the smallest safe path from repository evidence:
 
 - browser JavaScript SDK for web surfaces, including Vercel, Replit, and Lovable;
 - OAuth authorization code with PKCE plus the OpenAI-compatible REST API for mobile, desktop, CLI, server, and ChatGPT App backends;
 - preservation of existing authentication, subscriptions, credits, providers, and deployment;
-- delegated device authorization so the agent can provision a public OAuth client without receiving account credentials;
+- reusable one-month device authorization so the agent can provision a public OAuth client and later publish one approved Space app without receiving account credentials or asking twice;
 - optional private SDK storage and user-approved cross-app vaults;
 - one real, explicitly approved wallet-funded verification call before completion.
 
@@ -75,7 +75,7 @@ For a general BYOK or provider-key integration request, the skill preserves the 
 ## Security model
 
 - Agents never ask users to paste passwords, browser cookies, OAuth tokens, provider keys, device codes, or setup grants.
-- Setup uses a short-lived, scope-limited `asg_` grant approved in the browser and kept only in process memory.
+- Setup uses a one-month, project-scoped `asg_` grant approved in the browser and kept only in agent memory. It is reused across the approved OAuth integration, corrections, and one Space app target.
 - Runtime OAuth uses public PKCE clients. Server-side tokens must be encrypted and bound to the host application's own user.
 - Setup grants cannot spend wallet funds, access payments, or act as general account credentials.
 - Paid verification always requires separate, contemporaneous user approval.

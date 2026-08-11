@@ -8,7 +8,7 @@ Use the public client ID returned by `/api/v1/agent-control/oauth-clients/ensure
 
 Before setup approval, propose a stable URL on every exact browser origin where this integration will run. AI Pass binds the resulting client to those approved origins. The SDK requests a signed, server-bound handoff from `POST https://aipass.one/oauth2/handoff`; it does not use the app as the popup document. Never construct `/oauth2/callback?origin=...` yourself, omit the signed handoff parameters, or add an unapproved origin. A forged or unregistered target fails closed.
 
-Never initialize with a placeholder or include the short-lived setup grant in runtime code.
+Never initialize with a placeholder or include the project setup grant in runtime code.
 
 The official SDK is loaded from the AI Pass origin and is updated by AI Pass. Respect the host's existing CSP and dependency policy. Do not add a broad script exception, disable CSP, copy the SDK into the repository, or invent an integrity hash. When the existing policy disallows this runtime dependency, use backend OAuth.
 

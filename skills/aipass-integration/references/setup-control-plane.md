@@ -4,11 +4,7 @@ Use this flow to provision AI Pass without receiving a user's session credential
 
 ## Scope selection
 
-Request the minimum set:
-
-- SDK or backend OAuth for model access: `setup:read`, `oauth-clients:read`, `oauth-clients:create`.
-- AI Pass host login: the same setup scopes; request runtime `profile:read` only when ensuring its public client.
-- Ask Nova read-only integration questions: add `nova:query` only when needed.
+Request the standard project setup set once: `setup:read`, `oauth-clients:read`, `oauth-clients:create`, `space:read`, `space-apps:write`, `space-apps:publish`, and `nova:query`. The OAuth callbacks remain exact, and Space writes remain bound to one inferred project app slug. Request runtime `profile:read` only when ensuring a public client that intentionally uses AI Pass as host login.
 
 These grants do not authorize billing, payments, wallet access, account security, model spending, generic API keys, or administrator operations.
 
@@ -51,23 +47,37 @@ Content-Type: application/json
   "agentName": "Actual executing agent name",
   "projectName": "Inferred app name",
   "projectFingerprint": "4f23c8c2-75ee-4c7f-8762-cdb8225d7a31",
-  "setupVersion": 4,
+  "setupVersion": 5,
   "requestedScopes": [
     "setup:read",
     "oauth-clients:read",
-    "oauth-clients:create"
+    "oauth-clients:create",
+    "space:read",
+    "space-apps:write",
+    "space-apps:publish",
+    "nova:query"
   ],
   "proposedRedirectUris": [
     "http://localhost:3000/"
-  ]
+  ],
+  "proposedSpaceAppSlug": "example-app"
 }
 ```
 
-Always send `setupVersion: 4` when following this version of the skill. Version 4 fails closed when `oauth-clients:create` lacks exact proposed callbacks. Omitting the field is reserved for compatibility with the already-published v3 instructions and must not be used to create a callback-less client from this skill.
+Always send `setupVersion: 5` when following this version of the skill. It fails closed when `oauth-clients:create` lacks exact proposed callbacks, binds an existing Space from the approved account when available, and otherwise reserves the one app slug until that same account claims a Space. Omitting the field is reserved for compatibility with older published instructions.
 
 Use the true executing tool name; do not copy an example agent identity. The HTTP 201 response uses the standard AI Pass envelope. Its `data` contains `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete`, `expiresIn`, and `interval`.
 
-Show the user the app name, requested capability, and `verificationUriComplete`. Ask them to approve in their browser. Never ask them to paste a session token or setup grant, and never call the approval endpoint on their behalf.
+Show the user the app name, requested capability, and `verificationUriComplete`. When the environment has a browser or open-URL capability, open that user-facing URL once, then say that the approval page is open and ask the user to review it. Use the native capability instead of fetching the URL:
+
+- Local macOS terminal: `open "$verificationUriComplete"`
+- Local Linux desktop: `xdg-open "$verificationUriComplete"`
+- Local Windows PowerShell: `Start-Process $verificationUriComplete`
+- Replit, Lovable, or another browser IDE: use its native external-link or preview-opening affordance when available.
+
+Do not run a local desktop opener from a remote or headless shell where it would open on the server rather than the user's device. In that case, or when opening fails, present `verificationUriComplete` as a clickable link. Attempt the automatic open only once; do not reopen it on every pending poll.
+
+Opening the page is only a convenience handoff. Never use `curl`, an HTTP client, browser automation, or computer-use tools to inspect, sign in, click Continue, approve, or otherwise interact with the authorization page on the user's behalf. Never ask them to paste a session token or setup grant, and never call the approval endpoint yourself.
 
 ## 2. Poll for approval
 
@@ -87,14 +97,29 @@ While approval is pending, the API returns HTTP 400 with a standard envelope who
   "status": "approved",
   "accessToken": "asg_...",
   "tokenType": "Bearer",
-  "expiresIn": 1200,
-  "scopes": ["setup:read"]
+  "expiresIn": 2592000,
+  "scopes": ["setup:read", "oauth-clients:read", "oauth-clients:create", "space:read", "space-apps:write", "space-apps:publish", "nova:query"]
 }
 ```
 
-Honor the returned polling interval and all pending, denied, and expired outcomes. Do not restart automatically after denial. Keep both `deviceCode` and `accessToken` in process memory only and redact them from logs and output.
+Honor the returned polling interval and all pending, denied, and expired outcomes. Do not restart automatically after denial. Keep the `accessToken` in process memory only. Redact both values from logs and output.
 
-If the executing agent supports ephemeral authenticated remote MCP, continue with [remote-mcp.md](remote-mcp.md). If its MCP configuration would persist the bearer value, use the REST calls below instead. Never trade away the in-memory-only boundary merely to use MCP.
+### Resuming across turns
+
+Not every runtime can hold a process open while the user approves in a browser. A server-side or turn-based agent ends execution when it hands control back to the user, so a polling loop started before the approval never survives to see it. Hosts in this category include Replit, Lovable, v0, and Bolt.
+
+When the runtime cannot poll continuously, store the request and resume instead of looping:
+
+1. Add `.aipass/pending-device.json` to the project's ignore file, then write the raw `deviceCode`, the `userCode`, and the absolute `expiresIn` deadline to it.
+2. Open `verificationUriComplete` once with a native user-facing browser capability when available. Otherwise show it as a clickable link. End the turn asking the user to review, approve, and return.
+3. On a later turn, read that file and call the token endpoint once. On `authorization_pending`, ask the user to finish approving and end the turn again. Do not busy-loop and do not start a new device request.
+4. Delete the file as soon as the exchange succeeds, the request is denied, or the deadline passes.
+
+Never start a second device request while a stored one is still unexpired and unexchanged. A user who approved one code and is then handed another cannot tell which is live, and the approved one is silently abandoned.
+
+The stored `deviceCode` is scoped to this project. A retry can recover the same issued token while the grant remains valid, so delete the file immediately after a successful exchange as instructed. Treat it as a secret until deletion: never commit it, print it, or place it in application code.
+
+If the executing agent supports ephemeral authenticated remote MCP, continue with [remote-mcp.md](remote-mcp.md). If its MCP configuration would persist the bearer value, use the REST calls below instead. Never trade away the setup grant's in-memory-only boundary merely to use MCP. The device-code resume file above is the only value this flow may write to disk, and it never holds an `asg_` grant.
 
 ## 3. Read before mutating
 
@@ -138,13 +163,13 @@ The idempotency key is scoped by signed-in user, project fingerprint, and operat
 
 If AI Pass explicitly reports that the prior client for that key was deleted, deactivated, or no longer matches a secretless public PKCE client, never reactivate or modify it. Ask for a fresh setup approval, advance the persisted key once to the next version such as `oauth-client:v2`, and ensure a replacement. Do not rotate the key for transient network failures or to bypass a scope/name mismatch.
 
-## 5. Spaces use a separate approval
+## 5. Reuse this grant for the project's Space app
 
-This integration setup grant must not be reused for Space publishing. If Spaces is the selected optional host, revoke this grant and follow [spaces-path.md](spaces-path.md). The standalone manual requests its own exact publishing scopes and binds approval to the Space handle, app slug, project fingerprint, and HTML hash.
+The standard project grant already includes the publishing scopes displayed on the approval page and one exact `proposedSpaceAppSlug`. If the user asks for Spaces after the SDK or OAuth setup, read [spaces-path.md](spaces-path.md) and continue with this same bearer value. Do not start another device request. If the account had no Space during approval, the first preflight after the user claims one binds that same-account Space to the existing grant.
 
 ## 6. Optional read-only A2A support
 
-Discover Nova at `/.well-known/agent-card.json`. Calls require the same short-lived grant with `nova:query`:
+Discover Nova at `/.well-known/agent-card.json`. Calls use the same project grant with `nova:query`:
 
 ```http
 POST /a2a/v1/message:send
@@ -163,13 +188,15 @@ Authorization: Bearer asg_REDACTED
 
 The first release supports synchronous read-only messages that route questions to documentation, path guidance, and error checklists. It does not inspect the project, analyze a supplied plan or error, stream, manage tasks, provision, publish, or mutate anything.
 
-## 7. Revoke every setup session
+## 7. Keep one grant across project setup work
 
-After provisioning, save the returned public configuration and revoke each setup grant immediately, before runtime application edits or any wallet-funded verification:
+Keep one grant in process memory through integration, correction, retry, Nova guidance, and optional publication of the approved Space app. Do not revoke after provisioning the OAuth client or after the first Space call. Never persist it or use it outside the project resources shown on the approval page. Device approval does not authorize paid model calls.
+
+Revoke when the user asks to disconnect or the agent must abandon a credential it can no longer protect:
 
 ```http
 DELETE /api/v1/agent-control/session
 Authorization: Bearer asg_REDACTED
 ```
 
-The response is HTTP 200 and the grant becomes unusable immediately. Revoke only after the final control-plane or optional A2A call, and always before wallet-funded runtime verification. If implementation later requires another setup mutation, start a fresh user-approved device flow. On a terminal failure, revoke the current grant when the token is still available and cleanup is safe. Do not persist it for a later run.
+The response is HTTP 200 and the grant becomes unusable immediately. Normal task completion is not itself a reason to revoke while the same agent conversation may continue; server-side expiry ends it after one month. If the user requests a different project, callback destination, or Space app slug, start a fresh user-approved device flow rather than reusing this project grant.
