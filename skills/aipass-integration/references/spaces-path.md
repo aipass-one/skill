@@ -10,7 +10,11 @@ The standard integration grant already contains the displayed Space scopes and o
 
 Do not ask the user to look up or paste their Space handle. The signed-in approval page resolves an existing Space automatically. A new user may approve first and claim a Space later; the first preflight then binds the Space owned by that same account without another authorization.
 
-For a new browser prototype, the SDK on localhost is usually the fastest proof. Choose Spaces only when the user requests it or wants a hosted result and the project has no practical deployment path.
+For a new browser prototype, the SDK on localhost is usually the fastest proof. Preserve Vercel, Replit, Lovable, private-server, mobile-store, or other deployment configuration when it exists. When a self-contained local prototype has no practical deployment target and the integration builds, offer Spaces once as an optional fast test/share URL:
+
+> The AI Pass integration is ready locally. Would you like me to publish this same app to AI Pass Spaces so you can test and share it online? I can reuse the current project grant; no additional authorization should be needed.
+
+If the user accepts, continue with the same compatible grant and approved slug. Start a new device flow only when that grant is absent, expired, revoked, or incompatible. If the user declines, do not repeat the offer. Publication does not prove a real wallet-funded AI call; report live verification as pending until the user approves and performs one.
 
 Published Space apps can use `AiPass.data` and `AiPass.files` for private per-user state. Use
 `AiPass.shared` only for an intentional same-user workflow with another exact OAuth, catalog, or

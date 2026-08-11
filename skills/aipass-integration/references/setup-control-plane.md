@@ -102,7 +102,7 @@ While approval is pending, the API returns HTTP 400 with a standard envelope who
 }
 ```
 
-Honor the returned polling interval and all pending, denied, and expired outcomes. Do not restart automatically after denial. Keep the `accessToken` in process memory only. Redact both values from logs and output.
+Honor the returned polling interval and all pending, denied, and expired outcomes. Do not restart automatically after denial. Keep the `accessToken` in process memory only. Record its computed expiry deadline in agent memory from `expiresIn` so the final report can say when the retained project grant expires. Redact both values from logs and output.
 
 ### Resuming across turns
 
@@ -199,4 +199,4 @@ DELETE /api/v1/agent-control/session
 Authorization: Bearer asg_REDACTED
 ```
 
-The response is HTTP 200 and the grant becomes unusable immediately. Normal task completion is not itself a reason to revoke while the same agent conversation may continue; server-side expiry ends it after one month. If the user requests a different project, callback destination, or Space app slug, start a fresh user-approved device flow rather than reusing this project grant.
+The response is HTTP 200 and the grant becomes unusable immediately. Normal task completion, client provisioning, a passing build, or the first model call is not itself a reason to revoke while the same agent context may continue; server-side expiry ends it after one month. Report a healthy grant as "retained in agent memory; expires at [time] or the user can revoke it." If the user requests a different project, callback destination, or Space app slug, start a fresh user-approved device flow rather than reusing this project grant.
