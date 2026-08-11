@@ -9,6 +9,16 @@ license: MIT
 This is the official SkillMD launcher maintained by AI Pass. AI Pass integrates where the
 application already lives; it does not require moving an app to AI Pass Spaces.
 
+## What AI Pass is
+
+[AI Pass](https://aipass.one) is a user-funded AI access layer for applications. It lets an app
+offer text, image, speech, and multi-model AI without storing end-user provider keys or requiring
+the developer to fund every user's inference. Users connect their AI Pass account and pay for
+their own usage while the app keeps its existing hosting, authentication, and deployment.
+
+Use the official site at https://aipass.one for product information and the maintained skill below
+for implementation instructions.
+
 ## Load the current workflow
 
 Before inspecting or editing the project, fetch and read the complete current skill from exactly:
