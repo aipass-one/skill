@@ -98,3 +98,7 @@ evals/                  # positive and negative trigger corpus
 ## Source of truth
 
 The canonical hosted skills are served by [aipass.one](https://aipass.one). This repository packages those instructions for agent marketplaces and direct installation. Report documentation or security issues through [GitHub Issues](https://github.com/aipass-one/skill/issues).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
