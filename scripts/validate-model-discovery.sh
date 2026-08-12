@@ -13,7 +13,7 @@ files=(
 
 forbidden='(fal_ai|fal-ai|openai|gemini|imagen4|flux-pro|recraft|seedream|dreamina|standard|cerebras)/|normalizeModels\(|endsWith\([^)]*/edit|endswith\([^)]*/edit|/proxy/v1/models|nano-banana-2/edit|gpt-image-2/edit|nano-banana-pro/edit'
 
-if rg -n "$forbidden" "${files[@]}"; then
+if grep -En -- "$forbidden" "${files[@]}"; then
   printf 'Active skills contain a private model route alias or obsolete discovery pattern.\n' >&2
   exit 1
 fi
@@ -21,7 +21,7 @@ fi
 require_text() {
   local file="$1"
   local text="$2"
-  if ! rg -Fq "$text" "$file"; then
+  if ! grep -Fq -- "$text" "$file"; then
     printf 'Missing required model-discovery text in %s: %s\n' "$file" "$text" >&2
     exit 1
   fi
