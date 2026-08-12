@@ -1,0 +1,30 @@
+name: Skill validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate model discovery
+        run: ./scripts/validate-model-discovery.sh
+      - name: Validate bundled integration mirrors
+        run: ./scripts/validate-integration-mirrors.sh
+      - name: Validate Agent Skills discovery
+        run: npx -y skills@1.5.22 add . --list
