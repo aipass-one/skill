@@ -14,6 +14,12 @@ npx skills add aipass-one/skill --skill aipass-integration
 
 The repository is compatible with Codex, Claude Code, Cursor, OpenCode, and other tools that implement Agent Skills.
 
+The flagship package is synchronized from the reviewed, self-contained
+[`aipass-integration` v1.2.2 release](https://github.com/aipass-one/aipass-integration-skill/releases/tag/v1.2.2)
+at source commit `1a3f198ba413d2e0d905e6ffe7912bc3832ea4ea`. The multi-skill and dedicated
+repositories intentionally keep compatible install URLs, but their operative files must remain
+byte-identical.
+
 ### Claude Code plugin
 
 ```text
@@ -93,6 +99,7 @@ skills/
 .claude-plugin/         # Claude Code plugin + marketplace manifests
 .cursor-plugin/         # Cursor marketplace manifest
 evals/                  # positive and negative trigger corpus
+scripts/validate-integration-mirrors.sh # prevents bundled marketplace copies from drifting
 ```
 
 ## Source of truth
