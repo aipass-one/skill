@@ -28,13 +28,13 @@ Call `tools/list` and use only tools returned for the current grant. Legacy init
 | Tool | Required setup scope | Purpose |
 | --- | --- | --- |
 | `read_context` | `setup:read`; add `oauth-clients:read` to include owned public client metadata | Read grant bounds and the categories explicitly authorized for inspection. |
-| `ensure_public_oauth_client` | `oauth-clients:create` | Idempotently create or recover the approved project's public, secretless PKCE client. |
+| `ensure_public_oauth_client` | `oauth-clients:create` | Idempotently create, recover, or extend the approved project's public, secretless PKCE client. |
 | `get_integration_guidance` | `nova:query` | Get deterministic, read-only links and path guidance. |
 | `revoke_setup_session` | Any valid setup grant | Immediately revoke the calling grant. |
 
 There are no tools for model calls, wallet access, payments, billing, generic API keys, account security, administration, Space claiming, Space editing, or Space publication.
 
-For `ensure_public_oauth_client`, use the exact project name the user approved, the stable versioned idempotency key from `.aipass/config.json`, and runtime scope `api:access`. Add `profile:read` only when AI Pass is intentionally the host login. Read context before ensuring anything. Callback destinations are not tool arguments: the server reads the exact `proposedRedirectUris` shown during device approval and returns those immutable values in `redirectUris`.
+For `ensure_public_oauth_client`, use the exact project name the user approved, the stable versioned idempotency key from `.aipass/config.json`, and runtime scope `api:access`. Add `profile:read` only when AI Pass is intentionally the host login. Read context before ensuring anything. Callback destinations are not tool arguments: the server reads the exact `proposedRedirectUris` shown during device approval. When the owner chose an existing app on the approval page, the tool adds those callbacks to it and returns the same `clientId` with `updated: true`. When the result has `isError: true` and `structuredContent.error` is `existing_oauth_client_found`, no client was created: keep using a listed client ID that is already in `.aipass/config.json`, or start a new setup request so the owner can choose. Never rotate the idempotency key to get past it.
 
 ## Optional disconnect
 

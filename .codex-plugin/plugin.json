@@ -1,6 +1,6 @@
 {
   "name": "ai-pass",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Add user-funded multi-model AI to web, mobile, server, ChatGPT, and open-source applications through AI Pass SDK, OAuth, or REST.",
   "author": {
     "name": "AI Pass",
@@ -26,7 +26,7 @@
     "capabilities": [
       "Integrate user-funded AI in web, mobile, desktop, server, and ChatGPT apps",
       "Provision public OAuth clients through browser-approved device authorization",
-      "Call text, image, speech, transcription, embedding, and video models",
+      "Call text, image, speech, transcription, embedding, decision, and video models",
       "Preserve existing hosting, authentication, billing, and provider routes"
     ],
     "websiteURL": "https://aipass.one",

@@ -18,7 +18,7 @@ Before requesting setup approval, determine the real callback route and include 
 
 AI Pass also binds each newly issued authorization code to the exact callback used for that flow, so the token request must send that same callback byte-for-byte after trimming outer whitespace. Path, query, case, encoding, port, and trailing slash are significant. The authorization server accepts PKCE `S256` only; never fall back to `plain`.
 
-For a localhost proof, use the actual `http://localhost` or `http://127.0.0.1` callback implemented by the project. Public deployments require exact HTTPS callbacks. If another deployment origin or route is needed later, start a new setup approval or have the owner update the client deliberately in **Developer console → OAuth2 Clients**, then re-test every callback. Never substitute a callback that the user did not approve.
+For a localhost proof, use the actual `http://localhost` or `http://127.0.0.1` callback implemented by the project. Public deployments require exact HTTPS callbacks. If another deployment origin or route is needed later, start a new setup request that proposes the full callback list so the owner can add it to the same client on the approval page, or have the owner add it in **Developer console → OAuth2 Clients**. Keep the same client ID and re-test every callback. Never substitute a callback that the user did not approve.
 
 ## Server-side broker
 
@@ -117,6 +117,12 @@ Content-Type: application/json
 ```
 
 For the one paid verification call, choose a current low-cost non-reasoning text model and a short prompt. Use a small explicit output cap only when that model supports it; reasoning models may spend the cap internally and return no visible output. State the model and its variable input/output pricing basis before asking for spend approval.
+
+## Decisions
+
+Decision models return typed answers and probabilities for routing, triage, moderation, scoring, yes/no checks, or picking a tool. Use chat for generated text or explanations. Discover `type: "decision"`, capability `decision`, method `decisions` at runtime and call `AiPass.decide({ model, state, questions, signal, timeout })`. State accepts text, objects, or arrays. Choice uses a criteria object, score an ordered criteria array (never `levels`), and noul gives the probability of yes. Batch questions against one state; use low choice/score confidence for LLM or human fallback. Decisions never stream.
+
+See [SDK examples](https://aipass.one/docs/sdk#decisions) and [REST curl examples](https://aipass.one/docs/rest/openai-compatible#decisions). REST uses `/apikey/v1/decisions` or `/oauth2/v1/decisions` with its runtime credential, never a setup grant. OAuth also needs `api:access` and the client ID header. Jev 1.13 is a live example with input-only pricing ($0.042 per 1M tokens), free output, text-only input, a 64k request limit, and 32k for state plus the longest question. Do not hardcode model IDs.
 
 ## AI Pass as host login
 

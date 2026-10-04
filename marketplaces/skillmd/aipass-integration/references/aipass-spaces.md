@@ -14,11 +14,11 @@ Publishing uses a browser-approved `asg_` setup grant. Never ask the user to pas
 The grant:
 
 - gives reusable project setup access for up to one month so integration, correction, and publication do not require repeated approval;
-- is bound to the signed-in account, one app slug, and the stable project fingerprint, and binds that account's Space during approval or first later use;
-- can read the owner's Space, create or update one draft, and publish that draft;
+- is bound to the signed-in account, that account's approved Space, and one app slug; the project fingerprint identifies the grant for recovery and audit but is not the app ownership key;
+- can create or replace content, update metadata and visibility, publish or unlist, and explicitly delete that one owned app, including an app created under an older unavailable fingerprint;
 - cannot call models, spend wallet funds, access payments, read account secrets, or act as a normal user credential.
 
-Keep the `asg_` value only in process memory. Never print, persist, commit, or include credentials in tool output. Send credentials only to `https://aipass.one` over HTTPS. The raw `deviceCode` may be stored temporarily in a gitignored `.aipass/pending-device.json` only when a turn-based runtime cannot stay alive while the user approves; delete it at the first terminal outcome.
+Keep each returned `asg_` value only in process memory. Never print, persist, commit, or include it in tool output. To reuse the approved grant across agent turns, retain its raw `deviceCode` in the agent host's secure credential store when one exists. Otherwise use the portable `.aipass/project-grant.json` fallback described below. The recovery file is secret, must be gitignored and owner-readable only, and must never be served, bundled, committed, or copied into application code. Send either credential only to `https://aipass.one` over HTTPS.
 
 ## 1. Prepare the exact app before authorization
 
@@ -45,13 +45,23 @@ Choose a stable lowercase slug using letters, numbers, and hyphens. Build one co
 </html>
 ```
 
-Use `AiPass.streamText`, `generateCompletion`, image/audio/video helpers, `AiPass.data`, `AiPass.files`, and user-approved `AiPass.shared` only as documented by the browser SDK. The publishing grant must never appear in app HTML.
+Use `AiPass.streamText`, `generateCompletion`, `AiPass.decide`, image/audio/video helpers, `AiPass.data`, `AiPass.files`, and user-approved `AiPass.shared` only as documented by the browser SDK. The publishing grant must never appear in app HTML.
 
-Before the first request, reuse `.aipass/config.json`'s public `projectFingerprint`, or generate and persist a random UUID v4. It is a public project identifier, not a credential. Never derive it from a path, user, hostname, or Git remote. If the agent already holds a usable `asg_` project grant whose scopes include Space read/write/publish and whose project fingerprint and approved app slug match, skip device authorization and reuse it.
+Before the first request, reuse `.aipass/config.json`'s public `projectFingerprint`, or generate and persist a random UUID v4. It is a public project identifier, not a credential. Never derive it from a path, user, hostname, or Git remote.
 
-## 2. Start device authorization
+## Decisions
 
-No authentication is required:
+Decision models return typed answers and probabilities for routing, triage, moderation, scoring, yes/no checks, or picking a tool. Use chat for generated text or explanations. Discover `type: "decision"`, capability `decision`, method `decisions` at runtime and call `AiPass.decide({ model, state, questions, signal, timeout })`. State accepts text, objects, or arrays. Choice uses a criteria object, score an ordered criteria array (never `levels`), and noul gives the probability of yes. Batch questions against one state; use low choice/score confidence for LLM or human fallback. Decisions never stream.
+
+See [SDK examples](https://aipass.one/docs/sdk#decisions) and [REST curl examples](https://aipass.one/docs/rest/openai-compatible#decisions). REST uses `/apikey/v1/decisions` or `/oauth2/v1/decisions` with its runtime credential, never a setup grant. OAuth also needs `api:access` and the client ID header. Jev 1.13 is a live example with input-only pricing ($0.042 per 1M tokens), free output, text-only input, a 64k request limit, and 32k for state plus the longest question. Do not hardcode model IDs.
+
+## 2. Recover the grant or start device authorization
+
+Before creating a device request, look for a recovery record in the agent host's secure credential store or `.aipass/project-grant.json`. Read it without printing it. Reuse it only when its `baseUrl`, `projectFingerprint`, `proposedSpaceAppSlug`, and exact `requestedScopes` match this project and it is before `grantExpiresAt` when approved or before its initial device expiry while pending. Exchange its `deviceCode` once at the token endpoint. An `approved` response returns the same existing `asg_` grant without browser interaction; keep that token in memory and continue at preflight.
+
+Delete an incompatible or terminally failed recovery record. A terminal failure is `access_denied`, `expired_token`, `invalid_device_code`, or `setup_token_secret_changed`. Only then start a new device authorization. Do not replace a matching record merely because a new agent turn began.
+
+When no compatible recovery record exists, no authentication is required to start the device flow:
 
 ```http
 POST /api/v1/agent-auth/device
@@ -66,13 +76,16 @@ Content-Type: application/json
     "setup:read",
     "space:read",
     "space-apps:write",
-    "space-apps:publish"
+    "space-apps:publish",
+    "space-apps:delete"
   ],
   "proposedSpaceAppSlug": "my-ai-app"
 }
 ```
 
-Use the real executing tool name. Do not send `proposedSpaceHandle` and do not ask the user for it. Do not send `proposedContentSha256`; setup version 5 lets the agent fix and republish this one approved app without another authorization. The page shows the exact `@handle` when one exists, app slug, editing permission, and other scopes before approval. If the account has no Space yet, the user can still approve; after they claim a handle, the first preflight binds the Space owned by that same account to the existing grant.
+Use the real executing tool name. Do not send `proposedSpaceHandle` and do not ask the user for it. Do not send `proposedContentSha256`; setup version 5 lets the agent manage this one approved app without another authorization. The page shows the exact `@handle` when one exists, app slug, editing and publication permissions, and the separately labeled destructive delete capability before approval. Delete only when the user explicitly asks to delete that app. If the account has no Space yet, the user can still approve; after they claim a handle, the first preflight binds the Space owned by that same account to the existing grant.
+
+Immediately store the returned raw `deviceCode` plus `baseUrl`, `projectFingerprint`, `proposedSpaceAppSlug`, exact `requestedScopes`, and the absolute device expiry as the recovery record. Prefer the agent host's secure credential store. For the portable fallback, add `.aipass/project-grant.json` to `.git/info/exclude` when available or otherwise to `.gitignore`, reject a symlink at `.aipass` or the file path, create `.aipass` with owner-only access where supported, and create the file with mode `0600`. Never include `verificationUriComplete`, `userCode`, or an `asg_` token in the recovery record.
 
 Open `verificationUriComplete` once when the environment has a native browser or open-URL capability. Use `open "$verificationUriComplete"` on a local macOS terminal, `xdg-open "$verificationUriComplete"` on a local Linux desktop, `Start-Process $verificationUriComplete` in local Windows PowerShell, or the host's external-link affordance in Replit, Lovable, or another browser IDE. Do not run a desktop opener from a remote or headless server. When opening is unavailable, show the clickable URL.
 
@@ -87,9 +100,7 @@ Content-Type: application/json
 {"deviceCode":"in-memory device code"}
 ```
 
-Continue on `authorization_pending`, slow down on `slow_down`, and stop on denial or expiry. On success, keep the returned `asg_` access token in memory only.
-
-If the runtime ends its turn after handing control to the browser, add `.aipass/pending-device.json` to the project's ignore file and store only the raw `deviceCode`, `userCode`, and absolute expiry there. On the next turn, exchange that same device code once. Never start a second request while it remains unexpired. Delete the file after approval, denial, or expiry. Never write the `asg_` grant to disk.
+Continue on `authorization_pending`, slow down on `slow_down`, and stop on denial or expiry. On success, keep the returned `asg_` access token in memory only and replace the recovery record's expiry with the absolute `grantExpiresAt` computed from the response's `expiresIn`. Retain the recovery record until that deadline or explicit revocation. If a turn ends while approval is pending, the next turn must exchange the stored device code instead of creating another request.
 
 ## 3. Mandatory preflight
 
@@ -100,7 +111,7 @@ GET /api/v1/agent-control/space/preflight
 Authorization: Bearer asg_REDACTED
 ```
 
-The returned `handle` is the exact signed-in Space bound during approval or this first preflight. Save it as public metadata in `.aipass/config.json`; do not ask the user to copy it. Inspect `apps` and update the approved matching slug instead of creating a duplicate. The grant may revise content for this slug, but it cannot switch slugs or take over an app that is not already managed by the same project fingerprint.
+The returned `handle` is the exact signed-in Space bound during approval or this first preflight. Save it as public metadata in `.aipass/config.json`; do not ask the user to copy it. Inspect `apps` and update the approved matching slug instead of creating a duplicate. The owner-approved grant may manage this slug even when the app was created by a different or lost project fingerprint. It cannot switch to another Space or slug.
 
 Machine-readable failures:
 
@@ -128,7 +139,7 @@ Content-Type: application/json
 }
 ```
 
-The server verifies the approved Space, app slug, project fingerprint, and session scope, then writes `DRAFT`; it never publishes in the same call. A fresh project may create the approved slug. A returning project may update only an agent-managed app previously created with the same stable project fingerprint. It cannot take over another app.
+The server verifies the signed-in owner, approved Space, exact app slug, and session scope. A missing app is created as `DRAFT`; an existing owned app is updated in place and keeps its current `DRAFT`, `PUBLISHED`, or `UNLISTED` visibility. The project fingerprint is recorded for recovery and audit attribution but does not block an owner-authorized update to an older app.
 
 If the response is lost, run preflight again before retrying. Reuse the same slug, fingerprint, content, and idempotency key. Never invent a second slug to bypass an ambiguous response.
 
@@ -139,17 +150,42 @@ POST /api/v1/agent-control/space/apps/{approved-slug}/publish
 Authorization: Bearer asg_REDACTED
 ```
 
-Only the draft bound to this grant can be promoted. Confirm the response status is `PUBLISHED`, then open the preflight handle at `/spaces/{handle}/{slug}`. The public Spaces index lists only Spaces with published apps; the owner can still see empty Spaces, drafts, and failed builder records on their own Space page.
+Only the exact approved app in the owner's Space can be promoted. This also relists an `UNLISTED` app. Confirm the response status is `PUBLISHED`, then open the preflight handle at `/spaces/{handle}/{slug}`. The public Spaces index lists only Spaces with published apps; the owner can still see empty Spaces, drafts, unlisted apps, and failed builder records on their own Space page.
 
-## 6. Verify and keep the project grant available
+## 6. Manage settings and visibility when requested
+
+Use the write scope for app metadata and visibility changes:
+
+```http
+PATCH /api/v1/agent-control/space/apps/{approved-slug}
+Authorization: Bearer asg_REDACTED
+Content-Type: application/json
+
+{
+  "name": "Updated app name",
+  "shortDescription": "Updated description.",
+  "status": "UNLISTED"
+}
+```
+
+Send only fields the user asked to change. Supported visibility values are `PUBLISHED` and `UNLISTED`; use the publish endpoint to publish a draft or relist an unlisted app. Settings changes remain confined to the approved owner's Space and exact slug.
+
+Delete only after an explicit user request for this exact app. Deletion is permanent and requires the separately displayed `space-apps:delete` scope:
+
+```http
+DELETE /api/v1/agent-control/space/apps/{approved-slug}
+Authorization: Bearer asg_REDACTED
+```
+
+## 7. Verify and keep the project grant available
 
 Open the real app, exercise its normal AI Pass connection, and make a wallet-funded AI call only with contemporaneous user approval. Confirm one user action makes one model request and renders the real result. Exercise loading, cancellation, one error state, and storage isolation when used.
 
-Do not revoke merely because publication completed; the same agent conversation may need to correct or republish the app. Revoke only when the user asks to disconnect, the project identity changes, or the agent must abandon a credential it can no longer protect:
+Do not revoke or delete the recovery record merely because publication completed; a later turn may need to correct or republish the app. Revoke only when the user asks to disconnect, the project identity changes, or the agent must abandon a credential it can no longer protect:
 
 ```http
 DELETE /api/v1/agent-control/session
 Authorization: Bearer asg_REDACTED
 ```
 
-When revocation is requested, confirm a later control-plane request returns `CREDENTIAL_REVOKED`. Otherwise report that the in-memory project grant remains available until its one-month expiry or user revocation. Report the public Space URL, slug, and verification performed. Never include credential-bearing responses in the report.
+When revocation is requested, delete the recovery record after the revocation response and confirm a later control-plane request returns `CREDENTIAL_REVOKED`. Delete an expired record as well. Otherwise report that the project grant is recoverable across turns until its one-month expiry or user revocation. Report the public Space URL, slug, and verification performed. Never include credential-bearing responses in the report.

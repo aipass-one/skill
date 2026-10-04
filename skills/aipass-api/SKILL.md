@@ -1,9 +1,9 @@
 ---
 name: aipass-api
-description: Call text, image, image-edit, speech, transcription, embedding, and video models through AI Pass with a developer-owned API key. Use for personal scripts, internal tools, automation, or server jobs where the developer intentionally pays. For products whose end users should connect and fund their own AI usage, use aipass-integration instead.
+description: Call text, image, image-edit, speech, transcription, embedding, decision, and video models through AI Pass with a developer-owned API key. Use for personal scripts, internal tools, automation, or server jobs where the developer intentionally pays. For products whose end users should connect and fund their own AI usage, use aipass-integration instead.
 ---
 
-# AI Pass API — Complete Skill
+# AI Pass API: Complete Skill
 
 All AI features via `$AIPASS_API_KEY`. No browser, no SDK, no OAuth needed.
 
@@ -291,7 +291,7 @@ def transcribe(file_path, language="en"):
 
 **Endpoint:** `POST /v1/videos`
 
-Video generation is async — start, poll, download.
+Video generation is async: start, poll, download.
 
 ```python
 import time
@@ -341,7 +341,8 @@ curl -s "https://aipass.one/v1/videos/$VIDEO_ID/status" \
 | STT | `POST /audio/transcriptions` | `whisper-1` | `.text` |
 | Video | `POST /videos` | `veo-3.1-fast-generate-preview` | async → poll → `.downloadUrl` |
 | Embeddings | `POST /embeddings` | `text-embedding-3-small` | `.data[0].embedding` |
-| List models | `GET /models` | — | `.data[].id` |
+| Decisions | `POST /apikey/v1/decisions` | Discover `type=decision` | `.answers` |
+| List models | `GET /models` | None | `.data[].id` |
 
 ## 7. Text Embeddings
 
@@ -377,11 +378,50 @@ def embed_batch(texts, model="text-embedding-3-small"):
 
 ---
 
+## 8. Decisions
+
+Use decisions for classification, routing, moderation, scoring, or yes/no checks. Discover current IDs with `GET /v1/models?type=decision`. Catalog type and capability are `decision`; the method is `decisions`.
+
+```bash
+curl -sS "https://aipass.one/v1/models?type=decision" \
+  -H "Authorization: Bearer $AIPASS_API_KEY" \
+  | jq -r '.data[].id'
+```
+
+**Endpoint:** `POST /apikey/v1/decisions`
+
+Example model ID only: `jev-1.13` (TypeSafe Jev). Confirm availability through discovery before use.
+
+```bash
+curl -sS -X POST https://aipass.one/apikey/v1/decisions \
+  -H "Authorization: Bearer $AIPASS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My integration is broken and I am unhappy.",
+    "questions": {
+      "team": {"type":"choice","instructions":"Pick a team","criteria":{"billing":"Payments","technical":"Bugs"}},
+      "happy": {"type":"score","instructions":"Rate happiness","criteria":["Unhappy","Neutral","Happy"]},
+      "angry": {"type":"noul","instructions":"Is the customer angry?"}
+    }
+  }'
+```
+
+`state` and question `instructions` accept text, objects, or arrays. Choice uses a criteria object with 2..255 options. Score uses an **ordered criteria array** with 2..10 entries, never `levels`. Noul criteria are optional: `{"true":"Yes condition","false":"No condition"}`.
+
+**Response:** `{ model, answers, usage }`, JSON only, never streamed. Read `response.answers.team.choice`, `response.answers.happy.score`, and `response.answers.angry.noul`. Choice and score include `confidence` and `probabilities`. Score is 0-based against its `legend` and may fall between entries; `1.43` is between entries 1 and 2. Noul is the probability of yes; `0.86` means 86%. Usage includes `input_tokens` and `output_tokens`.
+
+**Pricing and limits:** The example TypeSafe Jev model costs $0.042 per 1M input tokens with free output. It is text-only, with a 64k request limit and 32k for state plus the longest question. Check catalog pricing for other models.
+
+**Tips:** Batch questions against one state. Confidence is separate from probability; use low choice/score confidence to fall back to an LLM or a human.
+
+---
+
 ## Cost Tips
 - `gpt-5-nano` for simple text (cheapest)
 - `gemini-2.5-flash-lite` for cheap text with good quality
 - `flux-pro-v1.1` for standard images (~$0.05)
-- `whisper-1` for audio — very cheap
+- `whisper-1` for audio (very cheap)
 - `tts-1` cheaper than `tts-1-hd`
 - `gpt-image-1-mini` cheaper than `gpt-image-1`
 
@@ -398,7 +438,7 @@ AiPass.initialize({ clientId: 'YOUR_CLIENT_ID', requireLogin: true, darkMode: tr
 
 Get your Client ID: https://aipass.one/panel/developer.html → OAuth2 Clients
 
-SDK methods mirror the API: `AiPass.generateCompletion()`, `AiPass.generateImage()`, `AiPass.editImage()`, `AiPass.generateSpeech()`, `AiPass.transcribeAudio()`, `AiPass.generateVideo()`
+SDK methods mirror the API: `AiPass.generateCompletion()`, `AiPass.generateImage()`, `AiPass.editImage()`, `AiPass.generateSpeech()`, `AiPass.transcribeAudio()`, `AiPass.generateVideo()`, `AiPass.decide()`
 
 Developers earn **50% commission** on every API call their users make.
 

@@ -9,6 +9,7 @@
     {
       "name": "ai-pass",
       "displayName": "AI Pass",
+      "version": "1.0.1",
       "source": "./",
       "description": "Add user-funded multi-model AI to any application while preserving its current hosting, auth, billing, and deployment.",
       "category": "development",
