@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ai-pass",
   "displayName": "AI Pass",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Add user-funded multi-model AI to web, mobile, server, ChatGPT, and open-source applications through AI Pass SDK, OAuth, or REST.",
   "author": {
     "name": "AI Pass",

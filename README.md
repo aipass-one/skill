@@ -43,7 +43,7 @@ https://aipass.one/skills/aipass-integration/SKILL.md
 - reusable one-month device authorization so the agent can provision a public OAuth client and later publish one approved Space app without receiving account credentials or asking twice;
 - optional private SDK storage and user-approved cross-app vaults;
 - truthful separation between a passing build and one real, explicitly approved wallet-funded verification call;
-- one to three app-specific follow-up suggestions, such as private data/files, speech, images, video, or embeddings;
+- one to three app-specific follow-up suggestions, such as private data/files, speech, images, video, embeddings, or decisions;
 - one optional Spaces test/share offer for a new local prototype with no deployment target, reusing the same project grant when accepted.
 
 ## Prompts that should work
@@ -58,6 +58,10 @@ Replace our shared provider key with AI Pass OAuth, but keep our Vercel deployme
 
 ```text
 Use AI Pass for image generation in this Replit project.
+```
+
+```text
+Add a yes/no moderation check to my app using AI Pass decisions.
 ```
 
 ```text
@@ -98,6 +102,8 @@ evals/                  # positive and negative trigger corpus
 ## Source of truth
 
 The canonical hosted skills are served by [aipass.one](https://aipass.one). This repository packages those instructions for agent marketplaces and direct installation. Report documentation or security issues through [GitHub Issues](https://github.com/aipass-one/skill/issues).
+
+The packaged skills mirror [`aipass-integration` v14](https://aipass.one/skills/aipass-integration/v14/SKILL.md) and [`aipass-spaces` v8](https://aipass.one/skills/aipass-spaces/v8/SKILL.md), with a bundled Spaces manual for offline use.
 
 ## License
 

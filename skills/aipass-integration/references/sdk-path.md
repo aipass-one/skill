@@ -68,6 +68,12 @@ async function generateWithAiPass(prompt) {
 
 Call `generateWithAiPass` from the app's actual generation button or form submission. Disable duplicate submission while the promise is active. Render `result.choices?.[0]?.message?.content` as text or through the product's existing sanitized result component.
 
+## Decisions
+
+Decision models return typed answers and probabilities for routing, triage, moderation, scoring, yes/no checks, or picking a tool. Use chat for generated text or explanations. Discover `type: "decision"`, capability `decision`, method `decisions` at runtime and call `AiPass.decide({ model, state, questions, signal, timeout })`. State accepts text, objects, or arrays. Choice uses a criteria object, score an ordered criteria array (never `levels`), and noul gives the probability of yes. Batch questions against one state; use low choice/score confidence for LLM or human fallback. Decisions never stream.
+
+See [SDK examples](https://aipass.one/docs/sdk#decisions) and [REST curl examples](https://aipass.one/docs/rest/openai-compatible#decisions). REST uses `/apikey/v1/decisions` or `/oauth2/v1/decisions` with its runtime credential, never a setup grant. OAuth also needs `api:access` and the client ID header. Jev 1.13 is a live example with input-only pricing ($0.042 per 1M tokens), free output, text-only input, a 64k request limit, and 32k for state plus the longest question. Do not hardcode model IDs.
+
 ## Preserve the real wallet experience
 
 - Let the first generation action open the SDK connection dialog when needed.

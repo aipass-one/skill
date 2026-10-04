@@ -12,6 +12,9 @@
     "Connect AI Pass OAuth to this Flutter app.",
     "Use AI Pass from the backend of this ChatGPT App.",
     "Add text, image, and speech generation through one user wallet.",
+    "Classify support tickets with Jev through AI Pass in our customer-facing app.",
+    "Add a yes/no moderation check to my app using AI Pass.",
+    "Use AI Pass decisions to score ticket urgency with each user's wallet and fall back to an LLM when confidence is low.",
     "Make this open-source project support AI calls without requiring maintainers to ship provider secrets."
   ],
   "negative": [

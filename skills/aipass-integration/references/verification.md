@@ -46,7 +46,7 @@ Report:
 - real model call used for verification, or "not run; live wallet-funded verification pending";
 - tests and local checks run;
 - existing authentication, subscriptions, credits, and providers preserved;
-- setup-grant status in this explicit form: "retained in agent memory; expires at [time] or the user can revoke it," unless it was actually revoked for a documented reason;
+- setup-grant status in this explicit form: "recoverable for this project until [time], or the user can revoke it," unless it was actually revoked for a documented reason;
 - user interaction still required, if any;
 - optional hardening left for later.
 

@@ -6,7 +6,7 @@ Read the bundled standalone manual for the Space app format and publication call
 
 [AI Pass Spaces manual](aipass-spaces.md)
 
-The standard integration grant already contains the displayed Space scopes and one project app slug. If it is still usable, reuse it with the standalone manual's REST calls; never start a second device request. If no grant exists yet, the manual creates the same one-month project-bound authorization. Never ask for a generic API key, password, browser cookie, session token, device code, or setup grant. Never call the human approval endpoint on the user's behalf.
+The standard integration grant already contains the displayed Space scopes and one project app slug. If it is still usable, reuse it with the standalone manual's REST calls; never start a second device request. The signed-in Space owner's approval allows that grant to create, replace, revise, change visibility, publish, unlist, or explicitly delete that exact owned app, including one created under an older unavailable project fingerprint. If no grant exists yet, the manual creates the same one-month project-bound authorization. Never ask for a generic API key, password, browser cookie, session token, device code, or setup grant. Never call the human approval endpoint on the user's behalf.
 
 Do not ask the user to look up or paste their Space handle. The signed-in approval page resolves an existing Space automatically. A new user may approve first and claim a Space later; the first preflight then binds the Space owned by that same account without another authorization.
 
