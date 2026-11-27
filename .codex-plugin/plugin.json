@@ -1,7 +1,7 @@
 {
   "name": "ai-pass",
-  "version": "1.0.1",
-  "description": "Add user-funded multi-model AI to web, mobile, server, ChatGPT, and open-source applications through AI Pass SDK, OAuth, or REST.",
+  "version": "1.1.0",
+  "description": "Integrate AI Pass user-funded wallets or app-funded per-user AI allowances in web, mobile, server and agent-built applications.",
   "author": {
     "name": "AI Pass",
     "url": "https://aipass.one"
@@ -14,20 +14,22 @@
     "user-funded-ai",
     "multi-model",
     "openai-compatible",
-    "byok-alternative"
+    "byok-alternative",
+    "app-funded-ai"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "AI Pass",
-    "shortDescription": "Add user-funded AI to any app.",
-    "longDescription": "Integrate AI Pass where an application already lives using the browser SDK, OAuth, or the OpenAI-compatible REST API. Users connect one wallet and fund exact model usage without exposing provider keys.",
+    "shortDescription": "Add user-funded or app-funded AI.",
+    "longDescription": "Integrate AI Pass where an application already lives. Users can connect their own wallet, or the app can fund per-user allowances through a server-held owner key and restricted execution OAuth.",
     "developerName": "AI Pass",
     "category": "Developer Tools",
     "capabilities": [
       "Integrate user-funded AI in web, mobile, desktop, server, and ChatGPT apps",
       "Provision public OAuth clients through browser-approved device authorization",
       "Call text, image, speech, transcription, embedding, decision, and video models",
-      "Preserve existing hosting, authentication, billing, and provider routes"
+      "Preserve existing hosting, authentication, billing, and provider routes",
+      "Manage app-funded per-user allowances, daily/monthly limits and AI usage reporting"
     ],
     "websiteURL": "https://aipass.one",
     "privacyPolicyURL": "https://aipass.one/privacy-policy",
