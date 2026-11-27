@@ -1,6 +1,6 @@
 # AI Pass for coding agents
 
-Add user-funded, multi-model AI to an application without storing provider keys or paying every user's inference bill.
+Add multi-model AI with either user-connected wallets or app-funded per-user allowances. Keep provider keys out of client applications.
 
 AI Pass works where the application already lives: Vercel, Replit, Lovable, ChatGPT Apps, mobile and desktop apps, private servers, and open-source repositories. Users connect their AI Pass wallet through OAuth and pay exact model usage. **AI Pass Spaces is optional hosting, not a requirement.**
 
@@ -32,8 +32,21 @@ https://aipass.one/skills/aipass-integration/SKILL.md
 | Goal | Skill | Credential model |
 |---|---|---|
 | Add AI Pass to an app whose users should fund their own calls | [`aipass-integration`](skills/aipass-integration/SKILL.md) | One browser-approved project key; user OAuth + SDK or REST |
+| Pay for your app users and manage allowances, daily/monthly caps and per-user expenses | [`aipass-app-credit`](skills/aipass-app-credit/SKILL.md) | Backend owner key; app/user/grant-bound execution OAuth |
 | Call AI for a personal script, agent, internal tool, or developer-funded server job | [`aipass-api`](skills/aipass-api/SKILL.md) | Developer API key |
 | Publish this project's self-contained HTML app to an AI Pass Space | [`aipass-spaces`](skills/aipass-spaces/SKILL.md) | Reuse the same browser-approved project key |
+
+## App-funded credits and developer dashboard
+
+Read the [public developer guide](skills/aipass-app-credit/references/developer-guide.md) for dashboard access, backend authentication, grants, execution tokens, refresh, usage and revocation.
+
+```bash
+npx skills add aipass-one/skill --skill aipass-app-credit
+```
+
+Example: “Use $aipass-app-credit to add per-user AI allowances behind our existing Google/Apple login and subscriptions. Our app pays; users do not connect personal wallets.”
+
+**Current status:** management is deployed; app-funded execution remains disabled pending funding configuration and funded validation. Startup promotion issuance/renewal is not implemented. Limits reserve estimated cost and do not guarantee an absolute final invoice ceiling.
 
 `aipass-integration` is the flagship skill. It chooses the smallest safe path from repository evidence:
 
@@ -91,6 +104,7 @@ For a general BYOK or provider-key integration request, the skill preserves the 
 ```text
 skills/
   aipass-integration/   # flagship user-funded app integration
+  aipass-app-credit/    # app-funded per-user allowances and AI expense ledger
   aipass-api/           # personal or developer-funded API calls
   aipass-spaces/        # optional hosted HTML publishing
 .codex-plugin/          # Codex marketplace manifest
@@ -103,7 +117,7 @@ evals/                  # positive and negative trigger corpus
 
 The canonical hosted skills are served by [aipass.one](https://aipass.one). This repository packages those instructions for agent marketplaces and direct installation. Report documentation or security issues through [GitHub Issues](https://github.com/aipass-one/skill/issues).
 
-The packaged skills mirror [`aipass-integration` v14](https://aipass.one/skills/aipass-integration/v14/SKILL.md) and [`aipass-spaces` v8](https://aipass.one/skills/aipass-spaces/v8/SKILL.md), with a bundled Spaces manual for offline use.
+The app-credit v1 skill and guide are packaged here from the backend canonical source; a domain-hosted discovery alias is not yet published. The packaged hosted skills mirror [`aipass-integration` v14](https://aipass.one/skills/aipass-integration/v14/SKILL.md) and [`aipass-spaces` v8](https://aipass.one/skills/aipass-spaces/v8/SKILL.md), with a bundled Spaces manual for offline use.
 
 ## License
 

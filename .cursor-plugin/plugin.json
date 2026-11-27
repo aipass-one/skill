@@ -1,8 +1,8 @@
 {
   "name": "ai-pass",
   "displayName": "AI Pass",
-  "version": "1.0.1",
-  "description": "Add user-funded multi-model AI to web, mobile, server, ChatGPT, and open-source applications through AI Pass SDK, OAuth, or REST.",
+  "version": "1.1.0",
+  "description": "Integrate AI Pass user-funded wallets or app-funded per-user AI allowances in web, mobile, server and agent-built applications.",
   "author": {
     "name": "AI Pass"
   },
@@ -15,7 +15,8 @@
     "user-funded-ai",
     "multi-model",
     "openai-compatible",
-    "byok-alternative"
+    "byok-alternative",
+    "app-funded-ai"
   ],
   "category": "developer-tools",
   "tags": [
