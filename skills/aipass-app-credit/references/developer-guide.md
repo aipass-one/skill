@@ -26,10 +26,10 @@ Google/Apple login in your app
 1. [Sign in to AI Pass](https://aipass.one/panel/auth) with the account that owns and funds your app. A separate developer account type is not required.
 2. Open [Developer Console](https://aipass.one/panel/developer). Reuse your app's existing **OAuth2 Client**, or choose **OAuth2 Clients → Register New Client** if it has none. A public client ID is an identifier, not a billing secret.
 3. Open **AI Credit Management** or [the dedicated panel](https://aipass.one/panel/ai-credit). It lists clients owned by the signed-in account.
-4. Choose the app. Configure its model/output policy, shared monthly admission limit and personal-wallet permission. Keep personal-wallet usage off if your product uses only app funding.
+4. Choose the app and open **App funding**. Enable app-funded requests and save. This section also controls whether users may connect and pay from their own wallets.
 5. Inspect user allowances, daily/monthly/total limits, charged amounts, pending holds, tokens, UTC monthly statements and CSV exports. These reports describe existing wallet charges; exporting them does not charge again.
 
-A $10 monthly app cap is shared by all its users. It is not $10 per user and does not fund an empty wallet. A $1 user allowance is separate permission within that shared cap. Amounts here are examples, not configured offers or retail subscription prices.
+Add funds to the funding wallet and assign a grant to each user. AI Pass checks the funding wallet, the grant and any per-user caps at request admission.
 
 ## 2. Configure the backend boundary
 
@@ -43,7 +43,9 @@ Keep these settings on your server:
 
 Never ship the funding key or provider keys in a website/mobile bundle. The backend must verify the app's Google/Apple/Firebase session itself. Derive the subject from the authenticated session; do not accept an arbitrary device-supplied ID or email. AI Pass does not need access to your Firebase service-account credentials for this server-to-server mode. Optional welcome-campaign identity checks use a separately configured Firebase project and public certificates.
 
-Use `(clientId, subject)` as the user identity. Subjects and grant keys accept ASCII letters, numbers, `.`, `_`, `~`, `-`, up to 128 characters. Email lookup/metadata is not implemented. Your own backend may map email to its verified UID without making email the wallet authority.
+Use `(clientId, subject)` as the user identity. Subjects and grant keys accept ASCII letters, numbers, `.`, `_`, `~`, `-`, up to 128 characters.
+
+After a user opts in, your backend can add a verified email as a label in your developer dashboard. Use the owner API key with `PUT /v1/sponsored/apps/{clientId}/users/{subject}/reporting-email` and a body containing `email` and a positive integer `revision`. Increment the revision on each change. Send `email: null` with a newer revision when the user withdraws consent or deletes their account. Usage, limits and wallet charges use the app user ID.
 
 The `asg_` project setup grant and existing setup MCP tools cannot fund wallets, administer allowances or execute AI. Provision the funding-owner key directly into the backend secret store; do not paste it into an agent conversation. No special universal AI Pass billing SDK is required for the REST flow below.
 
@@ -63,10 +65,10 @@ Configure the app once or when the owner intentionally changes policy:
 ```http
 PUT /v1/sponsored/apps/{clientId}
 
-{"enabled":true,"monthlyLimitUsd":"10.00","model":"<chosen-supported-chat-model>","maxOutputTokens":1024,"allowPersonalWallet":false}
+{"enabled":true,"allowPersonalWallet":false}
 ```
 
-Choose the model from the developer catalog. AI Pass pins the actual chat model and output ceiling to this policy; sending a different device `model` does not change the funded policy. A policy enabled for an app still cannot bypass the global execution switch or insufficient backing funds.
+App funding controls who pays. Select a compatible model in the inference request. Execution requires global activation and sufficient funds.
 
 After the app backend verifies the subscription/trial entitlement, prepare a stable grant:
 
@@ -120,13 +122,15 @@ The expiry above is illustrative. Honor the returned value and registered client
 The execution bearer currently permits only:
 
 - `POST /oauth2/v1/chat/completions` — nonstreaming chat, including supported receipt interpretation.
-- `POST /oauth2/v1/audio/transcriptions` — supported audio upload, up to 20 MB; fixed transcription model.
+- `POST /oauth2/v1/audio/transcriptions` — supported audio upload up to 20 MB. Set `model` in the multipart form to choose a compatible transcription model.
 
 Use a stable, unique `Idempotency-Key` for each logical operation. This example uses environment variables only for illustration; do not print tokens or commit them:
 
 ```bash
-curl --fail-with-body https://aipass.one/oauth2/v1/chat/completions   -H "Authorization: Bearer $AIPASS_EXECUTION_TOKEN"   -H "Idempotency-Key: $AI_OPERATION_ID"   -H 'Content-Type: application/json'   --data '{"messages":[{"role":"user","content":"Summarize this receipt."}],"stream":false}'
+curl --fail-with-body https://aipass.one/oauth2/v1/chat/completions   -H "Authorization: Bearer $AIPASS_EXECUTION_TOKEN"   -H "Idempotency-Key: $AI_OPERATION_ID"   -H 'Content-Type: application/json'   --data '{"model":"gemini-3.1-flash-lite","messages":[{"role":"user","content":"Summarize this receipt."}],"stream":false}'
 ```
+
+Choose models from [Supported models](https://aipass.one/docs/models). Chat accepts a compatible `model` ID and optional `max_tokens`. With no model specified, chat uses Gemini 3.1 Flash Lite and transcription uses Whisper. A chat request without `max_tokens` uses the provider’s response default. The owner-key chat route also accepts `model` and `max_tokens`. Its raw transcription route accepts an optional `model` query parameter.
 
 For JSON output, use `"response_format":{"type":"json_object"}`. Chat accepts at most 64 messages and a 3.5 MB body. Raw supported audio or standard supported multipart upload is accepted for transcription. Do not add payer/user overrides, query parameters or compressed request bodies. Streaming, model listing, decisions, images, video, profile, wallet and management endpoints are not supported by these restricted credentials, even if ordinary personal OAuth supports them.
 
@@ -167,9 +171,9 @@ GET /v1/sponsored/apps/{clientId}/usage?subject={subject}&month=2026-12&page=0&s
 
 Derive the queried subject from the logged-in app session. Omit `month` for lifetime reporting. The server usage endpoint returns a paginated array of per-grant rows, with fields including `subject`, `grant_key`, `credit_limit`, `charged_usd`, `held_usd`, `input_tokens`, `output_tokens`, `total_tokens`, `provider_cost_usd` and `platform_fee_usd`. Pages are zero-based; size is 1–1,000. Continue until a short page when exporting every row. Dashboard API pagination has its own response shape and 250-row maximum.
 
-Limits report grant-independent daily/monthly/lifetime charged amounts and holds plus shared app headroom. The user can spend only when every layer allows admission: backing wallet, app monthly policy, selected grant, and aggregate user caps. Outstanding estimated holds reduce remaining permission.
+Limits report the user’s daily, monthly and lifetime charged amounts and holds across grants. Estimated holds reduce the user’s remaining allowance and available wallet funds.
 
-**A quota is an admission control, not an absolute final invoice ceiling.** Actual accepted model work can cost more than its estimate, cross a quota and block later admissions; the full actual cost remains billable. Do not promise a mathematically strict $10 maximum bill. Statements use the request's admission UTC period even if settlement is later. Keep exact money as decimal values; do not use binary floating-point to recreate a competing expense ledger.
+Admission uses estimated costs. Final provider charges may exceed the estimate and reduce the allowance available for later requests. Statements use the request's admission UTC period even if settlement is later. Keep exact money as decimal values; do not use binary floating-point to recreate a competing expense ledger.
 
 ## 8. Revoke after entitlement changes
 

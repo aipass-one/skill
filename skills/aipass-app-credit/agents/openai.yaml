@@ -1,4 +1,4 @@
 interface:
   display_name: "AI Pass App Credits"
-  short_description: "Add app-funded AI budgets and per-user usage"
+  short_description: "Add app-funded allowances and per-user usage"
   default_prompt: "Use $aipass-app-credit to integrate AI Pass app-funded allowances, per-user usage and execution tokens while preserving this app's existing authentication and subscriptions."

@@ -117,7 +117,7 @@ evals/                  # positive and negative trigger corpus
 
 The canonical hosted skills are served by [aipass.one](https://aipass.one). This repository packages those instructions for agent marketplaces and direct installation. Report documentation or security issues through [GitHub Issues](https://github.com/aipass-one/skill/issues).
 
-The app-credit v1 skill and guide are packaged here from the backend canonical source; a domain-hosted discovery alias is not yet published. The packaged hosted skills mirror [`aipass-integration` v14](https://aipass.one/skills/aipass-integration/v14/SKILL.md) and [`aipass-spaces` v8](https://aipass.one/skills/aipass-spaces/v8/SKILL.md), with a bundled Spaces manual for offline use.
+The app-credit skill and developer guide follow the backend’s published contract; a domain-hosted discovery alias is not yet published. The packaged hosted skills mirror [`aipass-integration` v14](https://aipass.one/skills/aipass-integration/v14/SKILL.md) and [`aipass-spaces` v8](https://aipass.one/skills/aipass-spaces/v8/SKILL.md), with a bundled Spaces manual for offline use.
 
 ## License
 
