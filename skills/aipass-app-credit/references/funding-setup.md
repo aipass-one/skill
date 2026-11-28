@@ -14,7 +14,8 @@ when it is absent. [Add a secret version](https://docs.cloud.google.com/secret-m
    ```
 
    Run from this skill's directory or use the script's absolute path. Use `--account EMAIL`
-   when Google Cloud CLI has multiple saved accounts. The helper prints one AI Pass approval link
+   when Google Cloud CLI has multiple saved accounts. If your authorized project login is in
+   the Firebase CLI, add `--firebase-cli` instead. The helper prints one AI Pass approval link
    and waits up to ten minutes. Share the link with the owner and wait for their decision.
 
 3. The owner signs in to AI Pass and reviews the displayed app, project, and secret. Approval

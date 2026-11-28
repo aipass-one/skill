@@ -48,6 +48,22 @@ class FundingSetupTest(unittest.TestCase):
             {"replication": {"automatic": {}}}))
         self.assertEqual(google.call_args_list[0], google.call_args_list[2])
 
+    def test_firebase_cli_receives_the_secret_over_stdin(self):
+        output = io.StringIO()
+        with patch.object(setup, "post", side_effect=[DEVICE, AUTHORIZATION, ISSUED, None]) as post, \
+                patch.object(setup.time, "sleep"), patch.object(setup.subprocess, "run") as run, \
+                contextlib.redirect_stdout(output):
+            run.return_value.returncode = 0
+            run.return_value.stdout = CREDENTIAL
+            setup.provision(None, TARGET, None, firebase="/test/firebase")
+
+        self.assertEqual(run.call_args.args[0], [
+            "/test/firebase", "functions:secrets:set", "APP_KEY", "--project", "test-project",
+            "--data-file", "-", "--non-interactive", "--json"])
+        self.assertEqual(run.call_args.kwargs["input"], CREDENTIAL)
+        self.assertNotIn(CREDENTIAL, output.getvalue())
+        self.assertEqual(post.call_args_list[-1].args[0], setup.CONFIRM)
+
     def test_decline_never_issues_or_stores_a_key(self):
         with patch.object(setup, "post", side_effect=[DEVICE, setup.ApiError(400, "access_denied")]) as post, \
                 patch.object(setup.time, "sleep"), patch.object(setup, "google_access_token", return_value="google-token"), \

@@ -109,6 +109,18 @@ def save_to_secret_manager(target, funding_key, google_token):
             raise
     request_json(version_url, payload, google_token)
 
+def save_with_firebase_cli(firebase, target, funding_key):
+    command = [firebase, "functions:secrets:set", target["secretName"],
+               "--project", target["projectId"], "--data-file", "-", "--non-interactive", "--json"]
+    try:
+        result = subprocess.run(command, input=funding_key, capture_output=True, text=True,
+                                timeout=60, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise RuntimeError("Firebase CLI did not confirm the secret write.") from None
+    if result.returncode != 0:
+        raise RuntimeError("Firebase CLI did not confirm the secret write.")
+
+
 def confirm(bearer):
     for attempt in range(3):
         try:
@@ -124,8 +136,8 @@ def confirm(bearer):
     return False
 
 
-def provision(gcloud, target, google_account):
-    google_token = google_access_token(gcloud, google_account)
+def provision(gcloud, target, google_account, firebase=None):
+    google_token = google_access_token(gcloud, google_account) if firebase is None else None
     fingerprint = hashlib.sha256(json.dumps(target, sort_keys=True).encode()).hexdigest()
     device = post(DEVICE, {"agentName": "AI Pass funding setup", "projectFingerprint": fingerprint,
                            "requestedScopes": [SCOPE], "fundingKeyTarget": target})
@@ -142,11 +154,14 @@ def provision(gcloud, target, google_account):
             or not re.fullmatch(r"afk_[A-Za-z0-9_-]{43}", issued["token"])):
         raise RuntimeError(f"Unexpected response for issued key #{key_id}. Review it in App funding.")
     try:
-        save_to_secret_manager(target, issued["token"], google_token)
+        if firebase is None:
+            save_to_secret_manager(target, issued["token"], google_token)
+        else:
+            save_with_firebase_cli(firebase, target, issued["token"])
     except ApiError as exc:
         raise RuntimeError(f"Secret Manager returned HTTP {exc.status} for key #{key_id}. "
                            "Check write permissions and the destination’s versions before retrying.") from None
-    except (OSError, ValueError):
+    except (OSError, RuntimeError, ValueError):
         raise RuntimeError(f"Secret Manager delivery for key #{key_id} could not be confirmed. "
                            "Check the destination’s versions and App funding before retrying.") from None
     if not confirm(bearer):
@@ -163,6 +178,7 @@ def main():
     parser.add_argument("--project", required=True, help="Firebase project ID")
     parser.add_argument("--secret", required=True, help="Backend secret name")
     parser.add_argument("--account", help="Authorized Google Cloud CLI login")
+    parser.add_argument("--firebase-cli", action="store_true", help="Use the signed-in Firebase CLI for the secret write")
     parser.add_argument("--retire-key-id", type=int, help="Revoke this app's key after the new version is stored")
     args = parser.parse_args()
     if (not re.fullmatch(r"[A-Za-z0-9._~-]{1,255}", args.client_id)
@@ -170,13 +186,16 @@ def main():
             or not re.fullmatch(r"[A-Za-z0-9_-]{1,255}", args.secret)
             or args.retire_key_id is not None and args.retire_key_id <= 0):
         parser.error("Provide a valid OAuth client ID, Firebase project ID, secret name, and optional positive key ID.")
-    gcloud = shutil.which("gcloud")
-    if gcloud is None:
-        parser.error("An authorized Google Cloud CLI is required.")
+    if args.firebase_cli and args.account:
+        parser.error("Use --account with the Google Cloud CLI only.")
+    gcloud = None if args.firebase_cli else shutil.which("gcloud")
+    firebase = shutil.which("firebase") if args.firebase_cli else None
+    if gcloud is None and firebase is None:
+        parser.error("Install and sign in to the selected Google Cloud or Firebase CLI.")
     target = {"clientId": args.client_id, "projectId": args.project, "secretName": args.secret,
               "retireKeyId": args.retire_key_id}
     try:
-        provision(gcloud, target, args.account)
+        provision(gcloud, target, args.account, firebase=firebase)
     except ApiError as exc:
         print(f"AI Pass setup request failed (HTTP {exc.status}). Check the approval and App funding panel.", file=sys.stderr)
         return 1
