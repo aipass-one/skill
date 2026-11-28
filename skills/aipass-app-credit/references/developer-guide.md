@@ -24,10 +24,10 @@ Google/Apple login in your app
 ## 1. Open the developer dashboard
 
 1. [Sign in to AI Pass](https://aipass.one/panel/auth) with the account that owns and funds your app. A separate developer account type is not required.
-2. Open [Developer Console](https://aipass.one/panel/developer). Reuse your app's existing **OAuth2 Client**, or choose **OAuth2 Clients → Register New Client** if it has none. A public client ID is an identifier, not a billing secret.
-3. Open **AI Credit Management** or [the dedicated panel](https://aipass.one/panel/ai-credit). It lists clients owned by the signed-in account.
-4. Choose the app and open **App funding**. Enable app-funded requests and save. This section also controls whether users may connect and pay from their own wallets.
-5. Inspect user allowances, daily/monthly/total limits, charged amounts, pending holds, tokens, UTC monthly statements and CSV exports. These reports describe existing wallet charges; exporting them does not charge again.
+2. Open [AI Credit Management](https://aipass.one/panel/ai-credit) from the Developer Console. The list shows the apps you’ve added.
+3. Select **Add app** and choose an existing OAuth client. If you register a new app here, it also appears under **OAuth2 Clients** in the Developer Console.
+4. Open the app’s row and go to **App funding → Create app funding key**. Copy the key to your backend secret store. AI Pass reveals it once, and you can revoke it from the same page.
+5. Use the detail tabs to view allowances, user spending limits, tokens, statements and CSV exports. App funding also controls whether users can connect and pay from their own wallets.
 
 Add funds to the funding wallet and assign a grant to each user. AI Pass checks the funding wallet, the grant and any per-user caps at request admission.
 
@@ -37,38 +37,36 @@ Keep these settings on your server:
 
 - AI Pass origin: `https://aipass.one`.
 - The owned app's public `clientId`.
-- A funding-owner API key in your backend secret store, referenced below as `AIPASS_FUNDING_KEY`.
+- The app funding key in your backend secret store, referenced below as `AIPASS_FUNDING_KEY`.
 - A verified host session → stable app-local subject mapping, such as Firebase UID.
 - Verified subscription → grant key, UTC expiry and configurable allowance mapping.
 
-Never ship the funding key or provider keys in a website/mobile bundle. The backend must verify the app's Google/Apple/Firebase session itself. Derive the subject from the authenticated session; do not accept an arbitrary device-supplied ID or email. AI Pass does not need access to your Firebase service-account credentials for this server-to-server mode. Optional welcome-campaign identity checks use a separately configured Firebase project and public certificates.
+Never ship the funding key or provider keys in a website/mobile bundle. The backend must verify the app's Google/Apple/Firebase session itself. Derive the subject from the authenticated session; do not accept an arbitrary device-supplied ID or email. AI Pass does not need access to your Firebase service-account credentials for this server-to-server mode.
 
 Use `(clientId, subject)` as the user identity. Subjects and grant keys accept ASCII letters, numbers, `.`, `_`, `~`, `-`, up to 128 characters.
 
-After a user opts in, your backend can add a verified email as a label in your developer dashboard. Use the owner API key with `PUT /v1/sponsored/apps/{clientId}/users/{subject}/reporting-email` and a body containing `email` and a positive integer `revision`. Increment the revision on each change. Send `email: null` with a newer revision when the user withdraws consent or deletes their account. Usage, limits and wallet charges use the app user ID.
+After a user opts in, your backend can add a verified email as a label in your developer dashboard. Use the app funding key with `PUT /v1/sponsored/apps/{clientId}/users/{subject}/reporting-email` and a body containing `email` and a positive integer `revision`. Increment the revision on each change. Send `email: null` with a newer revision when the user withdraws consent or deletes their account. Usage, limits and wallet charges use the app user ID.
 
-The `asg_` project setup grant and existing setup MCP tools cannot fund wallets, administer allowances or execute AI. Provision the funding-owner key directly into the backend secret store; do not paste it into an agent conversation. No special universal AI Pass billing SDK is required for the REST flow below.
+The app funding key belongs in your backend secret store. General setup grants authorize project setup tools. The funding setup approval authorizes a single delivery operation for one app.
+
+### Let an agent provision the key
+
+Install the `aipass-app-credit` skill with the steps below. The agent runs its helper with the existing OAuth client ID, Firebase project ID, and backend secret name. Open the displayed AI Pass link and approve the app and destination. The helper uses your existing authorized Google Cloud CLI login to write the key into Secret Manager and reports the key ID. Use an explicit Google Cloud account if you have several CLI logins.
+
+For a live backend, provision the new key, switch the backend to its new secret version, then revoke the previous key in **App funding**. The helper also supports immediate retirement after delivery when you explicitly approve a previous key ID and the old key can be safely removed.
 
 ## 3. Prepare the app policy and each user's allowance
 
 All paths in this section start with `/v1/sponsored/apps/{clientId}` and require:
 
 ```http
-Authorization: Bearer <server-held-funding-owner-key>
+Authorization: Bearer <server-held-app-funding-key>
 Content-Type: application/json
 ```
 
-The key owner must own the active registered client. Browser management uses the owner's normal AI Pass session under `/api/sponsored/**`; it is a different authentication surface and has some different field names. Do not call dashboard APIs with execution tokens.
+The app funding key binds to one OAuth client. It authorizes allowance and limit updates, usage reads, optional reporting emails, welcome claims, and issuance and revocation of user execution tokens for that client. Browser management uses the owner’s AI Pass session under `/api/sponsored/**`. Use the dashboard to set app policy and campaign amounts.
 
-Configure the app once or when the owner intentionally changes policy:
-
-```http
-PUT /v1/sponsored/apps/{clientId}
-
-{"enabled":true,"allowPersonalWallet":false}
-```
-
-App funding controls who pays. Select a compatible model in the inference request. Execution requires global activation and sufficient funds.
+Use **App funding** in the dashboard to change who can pay. Execution requires global activation and sufficient funds.
 
 After the app backend verifies the subscription/trial entitlement, prepare a stable grant:
 
@@ -90,13 +88,26 @@ PUT /v1/sponsored/apps/{clientId}/users/{subject}/limits
 
 Send all three fields when replacing caps. `null` removes that cap; zero blocks new admission. Read current limits on normal status/login calls instead of overwriting owner decisions. Daily/monthly boundaries are UTC calendar boundaries. Use grant expiry and period-specific grants for subscription periods; calendar caps and an App Store renewal date are separate concepts.
 
+### Optional welcome allowance
+
+Open the selected app’s **Welcome campaign**, enter a USD amount, and save. On signup or sign-in, verify the user with your app’s existing identity provider. Derive their stable account ID on your backend, then claim the allowance with the app funding key:
+
+```http
+POST /v1/sponsored/apps/{clientId}/users/{subject}/welcome/claim
+Authorization: Bearer <server-held-app-funding-key>
+```
+
+Use the returned `grantKey` of `welcome` when requesting execution tokens. AI Pass creates at most one welcome allowance per app account. Repeated claims preserve its spending, allowance total, and any pause. **Stop new welcome claims** closes the campaign to new users. Your funding wallet pays as users spend the allowance.
+
+Existing Firebase-verified campaigns keep their configured verification and claim endpoint. To move one to backend-verified claims, stop the existing campaign and then save a new amount. Existing allowances still count toward the one-per-account rule.
+
 ## 4. Obtain execution tokens for the signed-in user
 
 Your protected backend endpoint verifies the current app session and entitlement, derives `{subject}` and `{grantKey}` itself, then sends:
 
 ```http
 POST /v1/sponsored/apps/{clientId}/users/{subject}/oauth
-Authorization: Bearer <server-held-funding-owner-key>
+Authorization: Bearer <server-held-app-funding-key>
 Content-Type: application/json
 
 {"grantKey":"<server-selected-entitlement-period>"}
@@ -130,7 +141,7 @@ Use a stable, unique `Idempotency-Key` for each logical operation. This example 
 curl --fail-with-body https://aipass.one/oauth2/v1/chat/completions   -H "Authorization: Bearer $AIPASS_EXECUTION_TOKEN"   -H "Idempotency-Key: $AI_OPERATION_ID"   -H 'Content-Type: application/json'   --data '{"model":"gemini-3.1-flash-lite","messages":[{"role":"user","content":"Summarize this receipt."}],"stream":false}'
 ```
 
-Choose models from [Supported models](https://aipass.one/docs/models). Chat accepts a compatible `model` ID and optional `max_tokens`. With no model specified, chat uses Gemini 3.1 Flash Lite and transcription uses Whisper. A chat request without `max_tokens` uses the provider’s response default. The owner-key chat route also accepts `model` and `max_tokens`. Its raw transcription route accepts an optional `model` query parameter.
+Choose models from [Supported models](/docs/models). Chat accepts a compatible `model` ID and optional `max_tokens`. With no model specified, chat uses Gemini 3.1 Flash Lite and transcription uses Whisper. A chat request without `max_tokens` uses the provider’s response default. The owner-key chat route also accepts `model` and `max_tokens`. Its raw transcription route accepts an optional `model` query parameter.
 
 For JSON output, use `"response_format":{"type":"json_object"}`. Chat accepts at most 64 messages and a 3.5 MB body. Raw supported audio or standard supported multipart upload is accepted for transcription. Do not add payer/user overrides, query parameters or compressed request bodies. Streaming, model listing, decisions, images, video, profile, wallet and management endpoints are not supported by these restricted credentials, even if ordinary personal OAuth supports them.
 
@@ -162,7 +173,7 @@ Refresh does not refill credit, change grants, renew a subscription or bypass pa
 
 ## 7. Display allowance and usage
 
-The backend calls these with its funding-owner key:
+The backend calls these with its app funding key:
 
 ```http
 GET /v1/sponsored/apps/{clientId}/users/{subject}/limits
@@ -181,13 +192,13 @@ For refunds, entitlement removal or app-account deletion, the authenticated back
 
 ```http
 POST /v1/sponsored/apps/{clientId}/users/{subject}/oauth/revoke
-Authorization: Bearer <server-held-funding-owner-key>
+Authorization: Bearer <server-held-app-funding-key>
 Content-Type: application/json
 
 {"grantKey":"<affected-entitlement-period>"}
 ```
 
-Successful revocation returns idempotent HTTP 204. It does not erase credit or past expenses and does not affect personal-wallet sessions, other users or other grants. Prevent future issuance without a valid entitlement. Notification delivery has latency; revocation cannot undo already admitted provider work. Owner-key revocation and grant/policy pause also stop new execution.
+Successful revocation returns idempotent HTTP 204. It does not erase credit or past expenses and does not affect personal-wallet sessions, other users or other grants. Prevent future issuance without a valid entitlement. Notification delivery has latency; revocation cannot undo already admitted provider work. App funding key revocation and grant/policy pause also stop new execution.
 
 Your app remains responsible for StoreKit/Google Play/Stripe purchase verification, renewals, restore, refunds and subscription entitlements. AI Pass manages the AI expense ledger; it is not an in-app purchase replacement. A retail price such as $5/month is distinct from the AI allowance you configure.
 
@@ -211,7 +222,7 @@ Then ask:
 Use $aipass-app-credit to integrate AI Pass as our app-funded AI ledger.
 Keep our existing Google/Apple login and subscription verification.
 Add a secure backend token exchange, per-user allowances, normal OAuth refresh,
-and usage reporting. Keep owner keys server-side and allowances configurable.
+and usage reporting. Keep the app funding key server-side and allowances configurable.
 Do not connect or charge users' personal AI Pass wallets.
 ```
 
