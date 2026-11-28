@@ -33,7 +33,8 @@ class ApiError(Exception):
 
 
 def request_json(url, body, bearer=None):
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers = {"Content-Type": "application/json", "Accept": "application/json",
+               "User-Agent": "AI-Pass-Funding-Setup/1.0"}
     if bearer:
         headers["Authorization"] = "Bearer " + bearer
     request = urllib.request.Request(url, json.dumps(body).encode(), headers=headers, method="POST")
